@@ -287,31 +287,31 @@ class Player extends Entity {
         let lmbInput = mouse.clicked;
         let zKeyInput = keys['KeyZ'];
 
-        // Handle LMB Charging
-        if (lmbInput && !this.attacking) {
-            this.isLmbCharging = true;
-            this.lmbChargeTime += dt;
-            
-            // Charge visual particle gather
-            if (this.lmbChargeTime > 15 && Math.random() < 0.4) {
-                let angle = Math.random() * Math.PI * 2;
-                let dist = 30 + Math.random() * 20;
-                let px = this.x + this.w/2 + Math.cos(angle) * dist;
-                let py = this.y + this.h/2 + Math.sin(angle) * dist;
-                particles.push(new Particle(px, py, "#00f3ff", 2, 12)); // Cyan gather for LMB
+        // Handle LMB - only charge if NOT already attacking
+        if (!this.attacking) {
+            if (lmbInput) {
+                this.isLmbCharging = true;
+                this.lmbChargeTime += dt;
+            } else if (this.isLmbCharging) {
+                // Mouse released - fire the attack
+                this.isLmbCharging = false;
+                if (this.lmbChargeTime > 25) {
+                    this.triggerChargedDash();
+                } else {
+                    this.triggerAttack();
+                }
+                this.lmbChargeTime = 0;
             }
-        } else if (!lmbInput && this.isLmbCharging) {
-            this.isLmbCharging = false;
-            if (this.lmbChargeTime > 25) {
-                this.triggerChargedDash();
-            } else {
-                this.triggerAttack();
+        } else {
+            // While attacking, clear the charging state so release after attack doesn't double-fire
+            if (!lmbInput) {
+                this.isLmbCharging = false;
+                this.lmbChargeTime = 0;
             }
-            this.lmbChargeTime = 0;
         }
 
-        // Z Key still triggers normal attack normally
-        if (zKeyInput && !this.justClicked && !this.isLmbCharging && !this.attacking) { 
+        // Z Key triggers normal attack
+        if (zKeyInput && !this.justClicked && !this.attacking) { 
             this.justClicked = true; 
             this.triggerAttack(); 
         } else if (!zKeyInput) { 
@@ -323,18 +323,9 @@ class Player extends Entity {
         if (heavyInput && !this.attacking) {
             this.charging = true;
             this.chargeTime += dt;
-            this.vx *= 0.1; // extreme slow down while charging
-            
-            // Charge visual particle gather
-            if (Math.random() < 0.3) {
-                let px = this.x + this.w/2 + (Math.random()-0.5)*40;
-                let py = this.y + this.h/2 + (Math.random()-0.5)*40;
-                particles.push(new Particle(px, py, "#ff00ea", 1, 10)); // Purple gather
-            }
-            
+            this.vx *= 0.1;
             if (!this.justRightClicked) this.justRightClicked = true;
         } else if (!heavyInput && this.justRightClicked) {
-            // Release Heavy Attack
             this.justRightClicked = false;
             if (this.charging) {
                 this.charging = false;
@@ -347,13 +338,13 @@ class Player extends Entity {
 
         if (this.attacking) {
             this.attackTimer -= dt * this.attackSpeedMult;
-            this.vx *= 0.3; // Huge friction during attack
+            this.vx *= 0.3;
             if (this.attackTimer <= 0) {
                 this.attacking = false;
-                if(this.comboStep === 4) {
-                    this.comboStep = 0; // Reset after heavy
+                if (this.comboStep === 4 || this.comboStep === 5) {
+                    this.comboStep = 0;
                 } else {
-                    this.comboWaitTimer = 25; 
+                    this.comboWaitTimer = 25;
                 }
                 this.doDamage();
             }
