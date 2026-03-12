@@ -535,25 +535,106 @@ class Player extends Entity {
             ctx.shadowBlur = 0;
         }
 
-        // Draw Sword Attack
+        // Draw Sword Attack — Dead Cells style
         if (this.attacking) {
-            let length = (this.comboStep === 4 || this.comboStep === 5) ? 120 : (60 + (this.comboStep === 3 ? 30 : 0));
+            let isHeavy = (this.comboStep === 4);
+            let isDash  = (this.comboStep === 5);
+            let totalTime = isHeavy ? 25 : (isDash ? 20 : (this.comboStep === 3 ? 18 : 12));
+            let progress  = 1 - (this.attackTimer / totalTime); // 0→1 over the attack
+            let length    = isHeavy ? 130 : (isDash ? 110 : (this.comboStep === 3 ? 100 : 75));
+
+            // Per-combo: arc sweeps from startA → endA
+            let startA, endA;
+            if (isHeavy) {
+                // Downward overhead slam sweep
+                startA = -Math.PI * 0.6;
+                endA   =  Math.PI * 0.2;
+            } else if (isDash) {
+                startA = -Math.PI * 0.15;
+                endA   =  Math.PI * 0.15;
+            } else if (this.comboStep === 1) {
+                startA = -Math.PI * 0.7;
+                endA   =  Math.PI * 0.3;
+            } else if (this.comboStep === 2) {
+                startA =  Math.PI * 0.7;
+                endA   = -Math.PI * 0.3;
+            } else { // combo 3 — thrust
+                startA = -0.15;
+                endA   =  0.15;
+            }
+
+            // Flip angles for left-facing
+            if (!this.facingRight) {
+                startA = Math.PI - startA;
+                endA   = Math.PI - endA;
+            }
+
+            let currentA = startA + (endA - startA) * progress;
+            let bladeColor = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#e0f0ff");
+
+            let ox = this.facingRight ? px + this.w + 4 : px - 4;
+            let oy = py + 18;
+
+            // --- Motion blur trails (fading copies) ---
+            let trailSteps = 5;
+            for (let t = 0; t < trailSteps; t++) {
+                let frac    = t / trailSteps;
+                let trailA  = startA + (endA - startA) * (progress - frac * 0.35 * progress);
+                let alpha   = (1 - frac) * 0.18;
+                if (alpha <= 0) continue;
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.translate(ox, oy);
+                ctx.rotate(trailA);
+                ctx.beginPath();
+                ctx.moveTo(10, 0);
+                ctx.lineTo(length, 0);
+                ctx.strokeStyle = bladeColor;
+                ctx.lineWidth   = 8 - t * 1.2;
+                ctx.lineCap     = "round";
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // --- Main blade ---
             ctx.save();
-            let sx = this.facingRight ? px + this.w + 10 : px - 10;
-            let sy = py + 16;
-            ctx.translate(sx, sy);
-            let angle = 0;
-            if (this.comboStep === 1) angle = 0.6;
-            else if (this.comboStep === 2) angle = -0.6;
-            if (!this.facingRight) angle = Math.PI - angle;
-            ctx.rotate(angle);
-            
+            ctx.translate(ox, oy);
+            ctx.rotate(currentA);
+
+            // Outer glow
+            ctx.shadowBlur  = isHeavy ? 40 : 25;
+            ctx.shadowColor = bladeColor;
+
+            // Blade body — gradient from handle to tip
+            let grad = ctx.createLinearGradient(0, 0, length, 0);
+            grad.addColorStop(0, "#fff");
+            grad.addColorStop(0.3, bladeColor);
+            grad.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.strokeStyle = grad;
+            ctx.lineWidth   = isHeavy ? 9 : 6;
+            ctx.lineCap     = "round";
             ctx.beginPath();
-            ctx.strokeStyle = (this.comboStep === 4) ? "#ff00ea" : ((this.comboStep === 5) ? "#0ff" : "#fff");
-            ctx.lineWidth = 12;
-            ctx.moveTo(0, 0); ctx.lineTo(length, 0);
+            ctx.moveTo(8, 0);
+            ctx.lineTo(length, 0);
             ctx.stroke();
+
+            // Bright white core
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth   = 2;
+            ctx.stroke();
+
+            // Tip flash
+            let tipX = length;
+            ctx.shadowBlur  = 30;
+            ctx.shadowColor = "#fff";
+            ctx.fillStyle   = "#fff";
+            ctx.beginPath();
+            ctx.arc(tipX, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+
             ctx.restore();
+            ctx.shadowBlur  = 0;
+            ctx.globalAlpha = 1;
         }
     }
 }
