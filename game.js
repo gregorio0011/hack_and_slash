@@ -476,7 +476,6 @@ class Player extends Entity {
         for (let enemy of enemies) {
             if (AABB(hitbox, enemy)) {
                 enemy.takeDamage(damage, this.facingRight);
-                if (crit) cameraShake.trigger(10, 15);
                 if (isHeavy) {
                     // Huge knockback
                     enemy.vx = this.facingRight ? 15 : -15;
@@ -591,6 +590,7 @@ class Player extends Entity {
             let isDash = (this.comboStep === 5);
             let totalTime = isHeavy ? 25 : (isDash ? 20 : (this.comboStep === 3 ? 18 : 12));
             let progress = 1 - (this.attackTimer / totalTime);
+            let length = isHeavy ? 120 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
             
             // --- Straight Slash Trails ---
             for(let i=0; i<this.swordTrail.length; i++) {
@@ -618,7 +618,7 @@ class Player extends Entity {
             let sy = py + 16;
             ctx.translate(sx, sy);
             
-            let angle = 0, length = isHeavy ? 120 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
+            let angle = 0;
             
             if (this.comboStep === 1) angle = Math.PI * 0.15;
             else if (this.comboStep === 2) angle = -Math.PI * 0.15;
