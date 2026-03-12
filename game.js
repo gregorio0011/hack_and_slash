@@ -314,7 +314,7 @@ class Player extends Entity {
             this.justRightClicked = false;
             if (this.charging) {
                 this.charging = false;
-                if (this.chargeTime > 30) {
+                if (this.chargeTime > 15) {
                     this.triggerHeavyAttack();
                 }
                 this.chargeTime = 0;
@@ -464,6 +464,29 @@ class Player extends Entity {
         ctx.shadowBlur = 0;
 
         ctx.filter = "none";
+        
+        // Draw Static Sword when not attacking
+        if (!this.attacking) {
+            ctx.save();
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "#ff0055";
+            ctx.fillStyle = "rgba(255, 0, 85, 0.9)";
+            
+            let sx = this.facingRight ? px + this.w - 5 : px + 5;
+            let sy = py + 22;
+            ctx.translate(sx, sy);
+            
+            // Pointing back a bit
+            ctx.rotate(this.facingRight ? -Math.PI/4 : Math.PI/4 + Math.PI);
+            
+            ctx.beginPath();
+            ctx.moveTo(0, -3);
+            ctx.lineTo(35, 0); // Blade length
+            ctx.lineTo(0, 3);
+            ctx.fill();
+            ctx.restore();
+            ctx.shadowBlur = 0;
+        }
 
         // Draw Sword Attack
         if (this.attacking) {
@@ -617,6 +640,97 @@ class Enemy extends Entity {
     }
 }
 
+class BatEnemy extends Entity {
+    constructor(x, y) {
+        super(x, y, 20, 20);
+        this.speed = 2.0;
+        this.hp = 30; this.maxHp = 30;
+        this.bouncePhase = Math.random() * Math.PI * 2;
+    }
+    update(dt) {
+        // Fly towards player
+        let dx = player.x + player.w/2 - (this.x + this.w/2);
+        let dy = player.y + player.h/2 - (this.y + this.h/2);
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < 600 && dist > 10) {
+            this.vx = (dx/dist) * this.speed;
+            this.vy = (dy/dist) * this.speed;
+            this.facingRight = (this.vx > 0);
+        } else {
+            this.vx *= 0.9;
+            this.vy *= 0.9;
+        }
+
+        this.bouncePhase += 0.1 * dt;
+        
+        // No gravity
+        this.x += this.vx; this.checkCollisionX();
+        this.y += this.vy; this.checkCollisionY();
+        if (this.flashTimer > 0) this.flashTimer -= dt;
+
+        if (AABB(this, player) && player.flashTimer <= 0) {
+            player.hp -= 10;
+            player.flashTimer = 40;
+            player.vx = this.facingRight ? 6 : -6;
+            player.vy = -4;
+            cameraShake.trigger(8, 10);
+            for(let i=0; i<10; i++) particles.push(new Particle(player.x+10, player.y+16, "#f00", 5, 20, true));
+        }
+    }
+    takeDamage(amt, hitRight) {
+        this.hp -= amt; this.flashTimer = 8;
+        this.vx = hitRight ? 8 : -8;
+        this.vy = -6; // Hit harder backwards in the air
+        
+        texts.push(new FloatingText(this.x, this.y, Math.floor(amt), "#fff"));
+        for(let i=0; i<8; i++) particles.push(new Particle(this.x+10, this.y+10, "#8a0303", 5, 30, true));
+        
+        if (this.hp <= 0) {
+            for(let i=0; i<2; i++) orbs.push(new Orb(this.x + 10, this.y + 10)); // Less XP
+            for(let i=0; i<15; i++) particles.push(new Particle(this.x+10, this.y+10, "#8a0303", 8, 40, true)); 
+            cameraShake.trigger(5, 10);
+        }
+    }
+    draw(ctx, cx, cy) {
+        let ex = this.x - cx, ey = this.y - cy;
+        let bob = Math.sin(this.bouncePhase) * 5;
+        ey += bob;
+
+        ctx.filter = this.flashTimer > 0 ? "brightness(3)" : "none";
+
+        // Bat Eye
+        ctx.fillStyle = "#ff00ea";
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#ff00ea";
+        ctx.beginPath();
+        ctx.arc(ex + this.w/2, ey + this.h/2, 6, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Bat Wings
+        ctx.fillStyle = "#11031c";
+        let wingSpan = 18;
+        let wingFlap = Math.cos(this.bouncePhase * 3) * 12;
+        
+        ctx.beginPath();
+        // Left Wing
+        ctx.moveTo(ex + this.w/2, ey + this.h/2);
+        ctx.lineTo(ex - wingSpan, ey + wingFlap);
+        ctx.lineTo(ex, ey + this.h);
+        ctx.fill();
+        
+        ctx.beginPath();
+        // Right Wing
+        ctx.moveTo(ex + this.w/2, ey + this.h/2);
+        ctx.lineTo(ex + this.w + wingSpan, ey + wingFlap);
+        ctx.lineTo(ex + this.w, ey + this.h);
+        ctx.fill();
+
+        ctx.filter = "none";
+    }
+}
+
 // --- Parallax Background Renderer ---
 function drawParallaxBackground(ctx, camX, camY) {
     // 1. Sky Gradient
@@ -719,7 +833,12 @@ function update(dt) {
     }
     
     if (Math.random() < 0.015 && enemies.length < 12) {
-        enemies.push(new Enemy(player.x + (Math.random() < 0.5 ? 800 : -800), 50));
+        let spawnX = player.x + (Math.random() < 0.5 ? 800 : -800);
+        if (Math.random() < 0.3) {
+            enemies.push(new BatEnemy(spawnX, player.y - 120 - Math.random() * 80));
+        } else {
+            enemies.push(new Enemy(spawnX, 50));
+        }
     }
 
     for (let i = orbs.length - 1; i >= 0; i--) {
