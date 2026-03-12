@@ -406,10 +406,10 @@ class Player extends Entity {
         let isDash = (this.comboStep === 5);
         
         let hitbox = {
-            x: this.facingRight ? this.x + this.w : this.x - (isHeavy || isDash ? 100 : 60),
-            y: this.y - (isHeavy || isDash ? 30 : 15), 
-            w: (isHeavy || isDash ? 100 : 60), 
-            h: this.h + (isHeavy || isDash ? 60 : 30)
+            x: this.facingRight ? this.x + this.w - 5 : this.x - (isHeavy || isDash ? 120 : 80),
+            y: this.y - (isHeavy || isDash ? 30 : 10),
+            w: (isHeavy || isDash ? 120 : 80),
+            h: this.h + (isHeavy || isDash ? 60 : 20)
         };
 
         let damage = this.baseDamage; // Constant damage for consistent hit count
@@ -543,8 +543,8 @@ class Player extends Entity {
             let sy = py + 16;
             ctx.translate(sx, sy);
             let angle = 0;
-            if (this.comboStep === 1) angle = 0.4;
-            else if (this.comboStep === 2) angle = -0.4;
+            if (this.comboStep === 1) angle = 0.6;
+            else if (this.comboStep === 2) angle = -0.6;
             if (!this.facingRight) angle = Math.PI - angle;
             ctx.rotate(angle);
             
@@ -1083,7 +1083,7 @@ function update(dt) {
         if (enemies[i].hp <= 0) enemies.splice(i, 1);
     }
     
-    if (player.level >= 7 && !bossSpawned) {
+    if (player.level >= 5 && !bossSpawned) {
         bossSpawned = true;
         enemies.push(new Boss(player.x + 600, 100));
         texts.push(new FloatingText(player.x, player.y - 100, "BOSS INCOMING", "#ff0000"));
