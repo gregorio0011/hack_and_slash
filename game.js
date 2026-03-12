@@ -461,12 +461,8 @@ class Player extends Entity {
             h: this.h + (isHeavy || isDash ? 60 : 30)
         };
 
-        let damage = this.baseDamage + (this.comboStep === 3 ? this.baseDamage * 0.8 : 0);
-        if (isHeavy) damage = this.baseDamage * 3.5;
-        if (isDash) damage = this.baseDamage * 2.5;
-
-        let crit = Math.random() < (isHeavy ? 0.5 : 0.25);
-        if (crit) { damage *= 2; cameraShake.trigger(isHeavy ? 15 : 8, 10); }
+        let damage = this.baseDamage; // Constant damage for consistent hit count
+        // Removed combo bonuses and crits as per user request for precise hit balance
 
         // Sword Visual Arc Particles
         for(let i=0; i<(isHeavy ? 20 : 8); i++) {
@@ -633,18 +629,18 @@ class Player extends Entity {
 
             ctx.rotate(angle);
             
-            // --- Straight Blade Strike (NO ARCS) ---
+            // --- High-Impact Straight Blade Strike ---
             ctx.beginPath();
             ctx.strokeStyle = slashColor;
-            ctx.lineWidth = 15;
-            ctx.lineCap = "butt";
-            ctx.moveTo(-length * 0.1, 0);
-            ctx.lineTo(length, 0);
+            ctx.lineWidth = 20; // Thicker for impact
+            ctx.lineCap = "square";
+            ctx.moveTo(0, 0);
+            ctx.lineTo(length * 1.2, 0); // Extended for impact
             ctx.stroke();
             
             // White core
             ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 6;
             ctx.stroke();
             
             ctx.restore();
@@ -846,7 +842,7 @@ class Projectile {
         this.w = 8; this.h = 8;
         this.vx = vx; this.vy = vy;
         this.ownerType = ownerType;
-        this.life = 40; // Even shorter range
+        this.life = 25; // Very short range
     }
     update(dt) {
         this.x += this.vx * dt; this.y += this.vy * dt;
@@ -874,7 +870,7 @@ class RangedEnemy extends Entity {
         if (dist > 450) this.vx = (dx/dist) * this.speed;
         else if (dist < 250) this.vx = -(dx/dist) * this.speed;
         else this.vx *= 0.8;
-        if (dist < 350) { // Reduced shooting detection range
+        if (dist < 280) { // Very short detection range
             this.shootTimer -= dt;
             if (this.shootTimer <= 0) {
                 this.shootTimer = 120 + Math.random() * 60;
