@@ -849,7 +849,7 @@ class Projectile {
         this.w = 8; this.h = 8;
         this.vx = vx; this.vy = vy;
         this.ownerType = ownerType;
-        this.life = 300;
+        this.life = 60; // Reduced range
     }
     update(dt) {
         this.x += this.vx * dt; this.y += this.vy * dt;
