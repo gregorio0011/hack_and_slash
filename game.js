@@ -106,18 +106,16 @@ class Particle {
     }
     draw(ctx, cx, cy) {
         ctx.fillStyle = this.color;
-        ctx.shadowBlur = 0;
         ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
         
-        // Fluid Slashes/Arcs instead of shards
+        // Dynamic Arcs instead of shards/circles
         ctx.save();
         ctx.translate(this.x - cx, this.y - cy);
         let angle = Math.atan2(this.vy, this.vx);
         ctx.rotate(angle);
         ctx.beginPath();
-        // Drawing a thin, arcing stroke
         ctx.moveTo(-this.size * 2, 0);
-        ctx.quadraticCurveTo(0, -this.size * 2, this.size * 2, 0);
+        ctx.quadraticCurveTo(0, -this.size * 1.5, this.size * 2, 0);
         ctx.strokeStyle = this.color;
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -126,6 +124,33 @@ class Particle {
         ctx.globalAlpha = 1;
     }
 }
+
+class AmbientParticle {
+    constructor() { this.reset(); }
+    reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.vx = (Math.random() - 0.5) * 0.4;
+        this.vy = -Math.random() * 0.4 - 0.2;
+        this.size = Math.random() * 2 + 1;
+        this.life = Math.random() * 200 + 100;
+        this.maxLife = this.life;
+        this.color = Math.random() < 0.5 ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 255, 255, 0.05)";
+    }
+    update(dt) {
+        this.x += this.vx * dt; this.y += this.vy * dt;
+        this.life -= dt;
+        if (this.life <= 0) this.reset();
+        if (this.x < 0) this.x = canvas.width;
+        if (this.x > canvas.width) this.x = 0;
+        if (this.y < 0) this.y = canvas.height;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+    }
+}
+const ambientParticles = Array.from({ length: 40 }, () => new AmbientParticle());
 
 class FloatingText {
     constructor(x, y, text, color) {
@@ -528,17 +553,18 @@ class Player extends Entity {
             let sx = this.facingRight ? px + this.w - 5 : px + 5;
             let sy = py + 22;
             
-            // Preparation poses
+            // --- Preparation Poses ---
             let tilt = 0;
             if (this.isLmbCharging) {
-                tilt = this.facingRight ? Math.PI/2 : -Math.PI/2; // Tilt back for charged strike
-                // Subtle shake while charging
-                let s = Math.min(this.lmbChargeTime/5, 3);
+                // Point sword mostly backwards
+                tilt = this.facingRight ? Math.PI * 0.8 : -Math.PI * 0.8;
+                let s = Math.min(this.lmbChargeTime/5, 4);
                 sx += (Math.random()-0.5)*s;
                 sy += (Math.random()-0.5)*s;
             } else if (this.charging) {
-                tilt = this.facingRight ? Math.PI * 0.7 : -Math.PI * 0.7; // Deep tilt for heavy attack
-                let s = Math.min(this.chargeTime/5, 4);
+                // Point sword even deeper back
+                tilt = this.facingRight ? Math.PI * 1.1 : -Math.PI * 1.1;
+                let s = Math.min(this.chargeTime/5, 6);
                 sx += (Math.random()-0.5)*s;
                 sy += (Math.random()-0.5)*s;
             }
@@ -546,26 +572,19 @@ class Player extends Entity {
             ctx.translate(sx, sy);
             ctx.rotate((this.facingRight ? -Math.PI/4 : Math.PI/4 + Math.PI) + tilt);
             
-            // Refined Katana Shape
+            // Build the Blade
             let grad = ctx.createLinearGradient(0, 0, 35, 0);
             grad.addColorStop(0, "#fff");
-            grad.addColorStop(0.2, "#aab");
             grad.addColorStop(1, "#334");
             
-            ctx.shadowBlur = (this.isLmbCharging || this.charging) ? 20 : 10;
-            ctx.shadowColor = this.charging ? "#ff00ea" : "#0ff";
+            ctx.shadowBlur = (this.isLmbCharging || this.charging) ? 25 : 10;
+            ctx.shadowColor = (this.charging) ? "#ff00ea" : "#00f3ff";
             ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.moveTo(0, -2);
-            ctx.lineTo(32, -1);
-            ctx.lineTo(35, 0);
-            ctx.lineTo(32, 1);
-            ctx.lineTo(0, 2);
-            ctx.fill();
+            ctx.moveTo(0, -2); ctx.lineTo(35, 0); ctx.lineTo(0, 2); ctx.fill();
             
             ctx.fillStyle = "#111"; ctx.fillRect(-8, -2, 8, 4); // Handle
             ctx.fillStyle = "#ffd700"; ctx.fillRect(-2, -5, 3, 10); // Guard
-            
             ctx.restore();
             ctx.shadowBlur = 0;
         }
@@ -577,35 +596,35 @@ class Player extends Entity {
             let totalTime = isHeavy ? 25 : (isDash ? 20 : (this.comboStep === 3 ? 18 : 12));
             let progress = 1 - (this.attackTimer / totalTime);
             
-            // Draw Afterimage Arcs
+            // Fluid Motion Arcs
             for(let i=0; i<this.swordTrail.length; i++) {
-                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.15;
+                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.2;
                 ctx.save();
                 let ghostX = this.swordTrail[i].x - cx, ghostY = this.swordTrail[i].y - cy;
                 ctx.translate(ghostX + (this.swordTrail[i].fr ? this.w + 10 : -10), ghostY + 16);
                 
                 ctx.strokeStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 3;
                 ctx.beginPath();
-                ctx.arc(0, 0, 50, -Math.PI/4, Math.PI/4);
+                ctx.arc(0, 0, 40 + i*5, -0.6, 0.6);
                 ctx.stroke();
                 ctx.restore();
             }
             ctx.globalAlpha = 1.0;
 
             ctx.save();
-            ctx.shadowBlur = (isHeavy || isDash) ? 35 : 20;
             let slashColor = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
+            ctx.shadowBlur = (isHeavy || isDash) ? 40 : 25;
             ctx.shadowColor = slashColor;
             
             let sx = this.facingRight ? px + this.w + 10 : px - 10;
             let sy = py + 16;
             ctx.translate(sx, sy);
             
-            let angle = 0, length = isHeavy ? 110 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
+            let angle = 0, length = isHeavy ? 120 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
             
-            if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.6;
-            else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.6;
+            if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.8;
+            else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.8;
             else if (this.comboStep === 3 || isDash) angle = 0;
             else if (isHeavy) angle = progress * Math.PI * 4;
 
@@ -614,21 +633,21 @@ class Player extends Entity {
 
             ctx.rotate(angle);
             
-            // Fluid Blade Slash Arcs
+            // Drawing the fluid blade arc
             ctx.beginPath();
             ctx.strokeStyle = slashColor;
-            ctx.lineWidth = 10;
+            ctx.lineWidth = 12;
             ctx.lineCap = "round";
             if (this.comboStep === 3 || isDash) {
                 ctx.moveTo(0, 0); ctx.lineTo(length, 0);
             } else {
-                ctx.arc(0, 0, length, -0.5, 0.5);
+                ctx.arc(0, 0, length, -0.6, 0.6);
             }
             ctx.stroke();
             
-            // White core for the slash
+            // White core
             ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4;
             ctx.stroke();
             
             ctx.restore();
@@ -642,7 +661,7 @@ class Enemy extends Entity {
     constructor(x, y) {
         super(x, y, 28, 34);
         this.speed = 1.0 + Math.random()*1.5;
-        this.hp = 180; this.maxHp = 180; // Triple health
+        this.hp = 350; this.maxHp = 350; // Much more HP
         this.patrolTimer = 60;
         this.bouncePhase = Math.random() * Math.PI * 2;
     }
@@ -737,7 +756,7 @@ class BatEnemy extends Entity {
     constructor(x, y) {
         super(x, y, 20, 20);
         this.speed = 2.0;
-        this.hp = 90; this.maxHp = 90; // Triple health
+        this.hp = 200; this.maxHp = 200; // Much more HP
         this.bouncePhase = Math.random() * Math.PI * 2;
     }
     update(dt) {
@@ -848,7 +867,7 @@ class Projectile {
 class RangedEnemy extends Entity {
     constructor(x, y) {
         super(x, y, 22, 32);
-        this.speed = 1.2; this.hp = 140; this.maxHp = 140; // Triple health
+        this.speed = 1.2; this.hp = 280; this.maxHp = 280; // Much more HP
         this.shootTimer = 100 + Math.random() * 50;
     }
     update(dt) {
@@ -1343,7 +1362,11 @@ function draw() {
     for (let t of texts) t.draw(ctx, finalCamX, finalCamY);
 
     // 5. Interface
-    drawHUD();
+    try {
+        drawHUD();
+    } catch(e) {
+        console.error("HUD Error:", e);
+    }
 }
 
 function loop(timestamp) {
