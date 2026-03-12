@@ -88,69 +88,29 @@ class Particle {
     }
     update(dt) {
         if (this.hasGravity) this.vy += GRAVITY * 0.5;
-        this.x += this.vx;
-        this.y += this.vy;
+        this.x += this.vx; this.y += this.vy;
         
         if (this.hasGravity) {
             for (let p of platforms) {
                 if (this.x > p.x && this.x < p.x + p.w && this.y + this.size > p.y && this.y < p.y + p.h) {
                     this.y = p.y - this.size;
-                    this.vy *= -0.3; // Bounce
-                    this.vx *= 0.5; // Friction
+                    this.vy *= -0.3; this.vx *= 0.5;
                 }
             }
         }
-        
         this.life -= dt;
         this.size = Math.max(0, this.size - dt * 0.05);
     }
     draw(ctx, cx, cy) {
         ctx.fillStyle = this.color;
         ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
-        
-        // Dynamic Arcs instead of shards/circles
-        ctx.save();
-        ctx.translate(this.x - cx, this.y - cy);
-        let angle = Math.atan2(this.vy, this.vx);
-        ctx.rotate(angle);
         ctx.beginPath();
-        ctx.moveTo(-this.size * 2, 0);
-        ctx.quadraticCurveTo(0, -this.size * 1.5, this.size * 2, 0);
-        ctx.strokeStyle = this.color;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.restore();
-        
+        ctx.arc(this.x - cx, this.y - cy, this.size, 0, Math.PI * 2);
+        ctx.fill();
         ctx.globalAlpha = 1;
     }
 }
-
-class AmbientParticle {
-    constructor() { this.reset(); }
-    reset() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
-        this.vx = (Math.random() - 0.5) * 0.4;
-        this.vy = -Math.random() * 0.4 - 0.2;
-        this.size = Math.random() * 2 + 1;
-        this.life = Math.random() * 200 + 100;
-        this.maxLife = this.life;
-        this.color = Math.random() < 0.5 ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 255, 255, 0.05)";
-    }
-    update(dt) {
-        this.x += this.vx * dt; this.y += this.vy * dt;
-        this.life -= dt;
-        if (this.life <= 0) this.reset();
-        if (this.x < 0) this.x = canvas.width;
-        if (this.x > canvas.width) this.x = 0;
-        if (this.y < 0) this.y = canvas.height;
-    }
-    draw(ctx) {
-        ctx.fillStyle = this.color;
-        ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
-    }
-}
-const ambientParticles = Array.from({ length: 40 }, () => new AmbientParticle());
+const ambientParticles = []; // Disabled for stability
 
 class FloatingText {
     constructor(x, y, text, color) {
@@ -586,66 +546,23 @@ class Player extends Entity {
 
         // Draw Sword Attack
         if (this.attacking) {
-            let isHeavy = (this.comboStep === 4);
-            let isDash = (this.comboStep === 5);
-            let totalTime = isHeavy ? 25 : (isDash ? 20 : (this.comboStep === 3 ? 18 : 12));
-            let progress = 1 - (this.attackTimer / totalTime);
-            let length = isHeavy ? 120 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
-            
-            // --- Straight Slash Trails ---
-            for(let i=0; i<this.swordTrail.length; i++) {
-                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.2;
-                ctx.save();
-                let ghostX = this.swordTrail[i].x - cx, ghostY = this.swordTrail[i].y - cy;
-                ctx.translate(ghostX + (this.swordTrail[i].fr ? this.w + 10 : -10), ghostY + 16);
-                
-                ctx.strokeStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                // Simple straight line for trail
-                ctx.moveTo(-length * 0.3, 0); ctx.lineTo(length * 0.7, 0);
-                ctx.stroke();
-                ctx.restore();
-            }
-            ctx.globalAlpha = 1.0;
-
+            let length = (this.comboStep === 4 || this.comboStep === 5) ? 120 : (60 + (this.comboStep === 3 ? 30 : 0));
             ctx.save();
-            let slashColor = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
-            ctx.shadowBlur = (isHeavy || isDash) ? 40 : 25;
-            ctx.shadowColor = slashColor;
-            
             let sx = this.facingRight ? px + this.w + 10 : px - 10;
             let sy = py + 16;
             ctx.translate(sx, sy);
-            
             let angle = 0;
-            
-            if (this.comboStep === 1) angle = Math.PI * 0.15;
-            else if (this.comboStep === 2) angle = -Math.PI * 0.15;
-            else if (this.comboStep === 3 || isDash) angle = 0;
-            else if (isHeavy) angle = Math.PI * 0.05;
-
+            if (this.comboStep === 1) angle = 0.4;
+            else if (this.comboStep === 2) angle = -0.4;
             if (!this.facingRight) angle = Math.PI - angle;
-
             ctx.rotate(angle);
             
-            // --- High-Impact Straight Blade Strike ---
             ctx.beginPath();
-            ctx.strokeStyle = slashColor;
-            ctx.lineWidth = 20; // Thicker for impact
-            ctx.lineCap = "square";
-            ctx.moveTo(0, 0);
-            ctx.lineTo(length * 1.2, 0); // Extended for impact
+            ctx.strokeStyle = (this.comboStep === 4) ? "#ff00ea" : ((this.comboStep === 5) ? "#0ff" : "#fff");
+            ctx.lineWidth = 12;
+            ctx.moveTo(0, 0); ctx.lineTo(length, 0);
             ctx.stroke();
-            
-            // White core
-            ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 6;
-            ctx.stroke();
-            
             ctx.restore();
-            ctx.shadowBlur = 0;
-            ctx.globalAlpha = 1.0;
         }
     }
 }
@@ -1330,26 +1247,12 @@ function draw() {
     // 2. Parallax
     drawParallaxBackground(ctx, finalCamX, finalCamY);
 
-    // 3. World Group
+    // World Group
     for (let p of platforms) drawTile(ctx, p, finalCamX, finalCamY);
     for (let orb of orbs) orb.draw(ctx, finalCamX, finalCamY);
     for (let enemy of enemies) enemy.draw(ctx, finalCamX, finalCamY);
     for (let p of projectiles) p.draw(ctx, finalCamX, finalCamY);
     player.draw(ctx, finalCamX, finalCamY);
-
-    // 4. Foreground Entities (Particles / Texts)
-    for (let ap of ambientParticles) {
-        ap.update(1); // Small internal dt
-        ap.draw(ctx);
-    }
-    
-    // Fog overlay
-    ctx.globalAlpha = 0.05;
-    ctx.fillStyle = "#fff";
-    for(let i=0; i<3; i++) {
-        ctx.fillRect( ((performance.now()*0.02 + i*200) % canvas.width), 0, 500, canvas.height);
-    }
-    ctx.globalAlpha = 1.0;
 
     for (let p of particles) p.draw(ctx, finalCamX, finalCamY);
     for (let t of texts) t.draw(ctx, finalCamX, finalCamY);
