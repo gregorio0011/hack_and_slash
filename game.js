@@ -557,15 +557,18 @@ class Player extends Entity {
             
             // Draw Afterimages
             for(let i=0; i<this.swordTrail.length; i++) {
-                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.3;
-                // Simplified ghost of the slash
+                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.2;
                 ctx.save();
                 let ghostX = this.swordTrail[i].x - cx, ghostY = this.swordTrail[i].y - cy;
                 ctx.translate(ghostX + (this.swordTrail[i].fr ? this.w + 10 : -10), ghostY + 16);
-                ctx.fillStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
+                
+                // Drawing a sharp line/slice instead of a white circle
+                ctx.strokeStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.arc(0, 0, 40, 0, Math.PI*2);
-                ctx.fill();
+                ctx.moveTo(-15, -15);
+                ctx.lineTo(15, 15);
+                ctx.stroke();
                 ctx.restore();
             }
             ctx.globalAlpha = 1.0;
@@ -1024,19 +1027,27 @@ function drawTile(ctx, p, camX, camY) {
     ctx.fillRect(tx, ty, p.w, p.h);
     
     // "Moss" or "Neon Circuit" top border
-    ctx.fillStyle = p.type === '2' ? "#00ffff" : "#1a1625";
+    ctx.fillStyle = p.type === '2' ? "#00ffff" : "#3d3d5c";
     if (p.type === '2') {
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 15;
         ctx.shadowColor = "#00ffff";
     }
     ctx.fillRect(tx, ty, p.w, 4);
     ctx.shadowBlur = 0;
 
-    // Stone texture detail (Horizontal Scratches)
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
-    ctx.fillRect(tx + 8, ty + 10, 15, 2);
-    ctx.fillRect(tx + 20, ty + 25, 12, 2);
-    ctx.fillRect(tx + 5, ty + 30, 8, 2);
+    // Detailed pattern
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(tx + 5, ty + 10); ctx.lineTo(tx + p.w - 5, ty + 10);
+    ctx.moveTo(tx + 5, ty + 20); ctx.lineTo(tx + p.w - 5, ty + 20);
+    ctx.moveTo(tx + 5, ty + 30); ctx.lineTo(tx + p.w - 5, ty + 30);
+    ctx.stroke();
+
+    // Stone cracks
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(tx + 12, ty + 12, 12, 2);
+    ctx.fillRect(tx + 5, ty + 25, 8, 2);
 
     // Edge lines
     ctx.strokeStyle = "rgba(0,0,0,0.5)";
@@ -1076,9 +1087,14 @@ function update(dt) {
     if (player.level >= 7 && !bossSpawned) {
         bossSpawned = true;
         enemies.push(new Boss(player.x + 600, 100));
+        texts.push(new FloatingText(player.x, player.y - 100, "BOSS INCOMING", "#ff0000"));
+        cameraShake.trigger(20, 30);
+        
+        // Arena Transition: Remove most platforms near the player except the floor
+        platforms = platforms.filter(p => p.y >= 500 || (p.x < player.x - 1000 || p.x > player.x + 2000));
     }
 
-    if (Math.random() < 0.015 && enemies.length < 12 && !gameWon) {
+    if (Math.random() < 0.04 && enemies.length < 15 && !gameWon) {
         let spawnX = player.x + (Math.random() < 0.5 ? 800 : -800);
         let roll = Math.random();
         if (roll < 0.2) {
@@ -1224,6 +1240,11 @@ function draw() {
     player.draw(ctx, finalCamX, finalCamY);
 
     // 4. Foreground Entities (Particles / Texts)
+    for (let ap of ambientParticles) {
+        ap.update(1); // Small internal dt
+        ap.draw(ctx);
+    }
+    
     // Fog overlay
     ctx.globalAlpha = 0.05;
     ctx.fillStyle = "#fff";
