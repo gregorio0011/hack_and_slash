@@ -411,8 +411,8 @@ class Player extends Entity {
         };
 
         let damage = this.baseDamage;
-        if (isHeavy) damage = this.baseDamage * 4;   // Heavy hit
-        if (isDash)  damage = this.baseDamage * 3;   // Charged dash
+        if (isHeavy) damage = this.baseDamage * 4;   // Heavy hit (4x)
+        if (isDash)  damage = this.baseDamage * 2;   // Charged dash (2x)
 
         // Sword Visual Arc Particles
         for(let i=0; i<(isHeavy ? 20 : 8); i++) {
