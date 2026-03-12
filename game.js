@@ -5,9 +5,16 @@ const ctx = canvas.getContext('2d');
 const keys = {};
 window.addEventListener('keydown', e => { keys[e.code] = true; });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
-const mouse = { x: 0, y: 0, clicked: false };
-window.addEventListener('mousedown', e => { if(e.button === 0) mouse.clicked = true; });
-window.addEventListener('mouseup', e => { if(e.button === 0) mouse.clicked = false; });
+    window.addEventListener('mousedown', e => { 
+        if(e.button === 0) mouse.clicked = true; 
+        if(e.button === 2) mouse.rightClicked = true;
+    });
+    window.addEventListener('mouseup', e => { 
+        if(e.button === 0) mouse.clicked = false; 
+        if(e.button === 2) mouse.rightClicked = false;
+    });
+    // Previne o menu de contexto do botão direito
+    window.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- Game Constants & Globals ---
 const GRAVITY = 0.5;
@@ -221,11 +228,18 @@ class Player extends Entity {
     constructor(x, y) {
         super(x, y, 20, 36);
         this.speed = 4.5;
-        this.jumpForce = 11;
+        this.jumpForce = 9;
+        this.maxJumpTime = 15; // Frames allowed to hold jump
+        this.jumpTimer = 0;
+        this.doubleJumped = false;
+        
         this.level = 1; this.xp = 0; this.xpNext = 100; this.score = 0;
         this.baseDamage = 25; this.attackSpeedMult = 1.0;
         this.attacking = false; this.attackTimer = 0; this.comboStep = 0; this.comboWaitTimer = 0;
+        this.charging = false; this.chargeTime = 0;
         this.justClicked = false;
+        this.justRightClicked = false;
+        this.justJumped = false;
         this.trail = []; // For scarf
     }
     
@@ -234,21 +248,88 @@ class Player extends Entity {
         else if (keys['KeyD'] || keys['ArrowRight']) { this.vx = this.speed; this.facingRight = true; }
         else { this.vx *= FRICTION; }
         
-        if ((keys['Space'] || keys['KeyW'] || keys['ArrowUp']) && this.grounded) {
-            this.vy = -this.jumpForce; this.grounded = false;
-            for(let i=0; i<5; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h, "#aaa", 2, 10)); // Jump dust
+        let jumpInput = keys['Space'] || keys['KeyW'] || keys['ArrowUp'];
+        
+        // Reset double jump on ground
+        if (this.grounded) {
+            this.doubleJumped = false;
+            this.jumpTimer = 0;
         }
 
+        // Variable Jump & Double Jump Logic
+        if (jumpInput) {
+            if (!this.justJumped) {
+                this.justJumped = true;
+                if (this.grounded) {
+                    // Initial Jump
+                    this.vy = -this.jumpForce;
+                    this.grounded = false;
+                    this.jumpTimer = this.maxJumpTime;
+                    for(let i=0; i<5; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h, "#aaa", 2, 10)); // Jump dust
+                } else if (!this.doubleJumped && !this.grounded) {
+                    // Double Jump
+                    this.vy = -this.jumpForce * 0.9;
+                    this.doubleJumped = true;
+                    this.jumpTimer = this.maxJumpTime * 0.5; // Shorter variable height for double jump
+                    // Double jump effect
+                    for(let i=0; i<8; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h, "#0ff", 3, 15, true));
+                }
+            } else if (this.jumpTimer > 0) {
+                // Holding Jump to go higher
+                this.vy -= 0.4 * dt;
+                this.jumpTimer -= dt;
+            }
+        } else {
+            this.justJumped = false;
+            this.jumpTimer = 0; // Cut jump short if released
+        }
+
+        // Light Attack (Left Click / Z)
         let attackInput = (keys['KeyZ'] || mouse.clicked);
-        if (attackInput && !this.justClicked) { this.justClicked = true; this.triggerAttack(); } 
-        else if (!attackInput) { this.justClicked = false; }
+        if (attackInput && !this.justClicked && !this.charging) { 
+            this.justClicked = true; 
+            this.triggerAttack(); 
+        } else if (!attackInput) { 
+            this.justClicked = false; 
+        }
+
+        // Heavy Attack Hold (Right Click / X)
+        let heavyInput = (keys['KeyX'] || mouse.rightClicked);
+        if (heavyInput && !this.attacking) {
+            this.charging = true;
+            this.chargeTime += dt;
+            this.vx *= 0.1; // extreme slow down while charging
+            
+            // Charge visual particle gather
+            if (Math.random() < 0.3) {
+                let px = this.x + this.w/2 + (Math.random()-0.5)*40;
+                let py = this.y + this.h/2 + (Math.random()-0.5)*40;
+                particles.push(new Particle(px, py, "#ff00ea", 1, 10)); // Purple gather
+            }
+            
+            if (!this.justRightClicked) this.justRightClicked = true;
+        } else if (!heavyInput && this.justRightClicked) {
+            // Release Heavy Attack
+            this.justRightClicked = false;
+            if (this.charging) {
+                this.charging = false;
+                if (this.chargeTime > 30) {
+                    this.triggerHeavyAttack();
+                }
+                this.chargeTime = 0;
+            }
+        }
 
         if (this.attacking) {
             this.attackTimer -= dt * this.attackSpeedMult;
             this.vx *= 0.3; // Huge friction during attack
             if (this.attackTimer <= 0) {
                 this.attacking = false;
-                this.comboWaitTimer = 25; 
+                if(this.comboStep === 4) {
+                    this.comboStep = 0; // Reset after heavy
+                } else {
+                    this.comboWaitTimer = 25; 
+                }
                 this.doDamage();
             }
         }
@@ -278,22 +359,38 @@ class Player extends Entity {
         for(let i=0; i<3; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h, "#555", 3, 10));
     }
 
+    triggerHeavyAttack() {
+        this.attacking = true;
+        this.comboStep = 4; // Indicator for heavy attack
+        this.attackTimer = 25;
+        this.vx += this.facingRight ? 16 : -16; // Huge Lunge
+        this.vy = -4; // Slight hop
+        cameraShake.trigger(5, 10);
+        for(let i=0; i<10; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h, "#ff00ea", 5, 20)); // Blast off dust
+    }
+
     doDamage() {
+        let isHeavy = (this.comboStep === 4);
+        
         let hitbox = {
-            x: this.facingRight ? this.x + this.w : this.x - 60,
-            y: this.y - 15, w: 60, h: this.h + 30
+            x: this.facingRight ? this.x + this.w : this.x - (isHeavy ? 100 : 60),
+            y: this.y - (isHeavy ? 30 : 15), 
+            w: (isHeavy ? 100 : 60), 
+            h: this.h + (isHeavy ? 60 : 30)
         };
 
         let damage = this.baseDamage + (this.comboStep === 3 ? this.baseDamage * 0.8 : 0);
-        let crit = Math.random() < 0.25;
-        if (crit) { damage *= 2; cameraShake.trigger(8, 10); }
+        if (isHeavy) damage = this.baseDamage * 3.5; // Massive damage
+
+        let crit = Math.random() < (isHeavy ? 0.5 : 0.25);
+        if (crit) { damage *= 2; cameraShake.trigger(isHeavy ? 15 : 8, 10); }
 
         // Sword Visual Arc Particles
-        for(let i=0; i<8; i++) {
+        for(let i=0; i<(isHeavy ? 20 : 8); i++) {
             particles.push(new Particle(
                 hitbox.x + Math.random() * hitbox.w,
                 hitbox.y + Math.random() * hitbox.h,
-                "#ff0055", 3, 15
+                isHeavy ? "#ff00ea" : "#ff0055", isHeavy ? 6 : 3, 15
             ));
         }
 
@@ -301,6 +398,11 @@ class Player extends Entity {
             if (AABB(hitbox, enemy)) {
                 enemy.takeDamage(damage, this.facingRight);
                 if (crit) cameraShake.trigger(10, 15);
+                if (isHeavy) {
+                    // Huge knockback
+                    enemy.vx = this.facingRight ? 15 : -15;
+                    enemy.vy = -8;
+                }
             }
         }
     }
@@ -364,36 +466,45 @@ class Player extends Entity {
 
         // Draw Sword Attack
         if (this.attacking) {
-            let progress = 1 - (this.attackTimer / (this.comboStep === 3 ? 18 : 12));
+            let isHeavy = (this.comboStep === 4);
+            let totalTime = isHeavy ? 25 : (this.comboStep === 3 ? 18 : 12);
+            let progress = 1 - (this.attackTimer / totalTime);
             ctx.save();
             
             // Neon Glow effect
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = "#ff0055";
-            ctx.fillStyle = "rgba(255, 0, 85, 0.9)";
+            ctx.shadowBlur = isHeavy ? 30 : 20;
+            ctx.shadowColor = isHeavy ? "#ff00ea" : "#ff0055";
+            ctx.fillStyle = isHeavy ? "rgba(255, 0, 234, 0.9)" : "rgba(255, 0, 85, 0.9)";
             
             let sx = this.facingRight ? px + this.w + 10 : px - 10;
             let sy = py + 16;
             ctx.translate(sx, sy);
             
-            let angle = 0, length = 60 + (this.comboStep === 3 ? 30 : 0);
+            let angle = 0, length = isHeavy ? 100 : (60 + (this.comboStep === 3 ? 30 : 0));
             
             if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.2;
             else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.2;
-            else if (this.comboStep === 3) angle = 0;
+            else if (this.comboStep === 3) angle = 0; // Thrust
+            else if (isHeavy) {
+                // Circular massive spin for heavy
+                angle = progress * Math.PI * 4; // spin twice
+            }
 
-            if (!this.facingRight && this.comboStep !== 3) angle = Math.PI - angle;
-            else if (!this.facingRight) angle = Math.PI;
+            if (!this.facingRight && this.comboStep !== 3 && !isHeavy) angle = Math.PI - angle;
+            else if (!this.facingRight && !isHeavy) angle = Math.PI;
 
             ctx.rotate(angle);
             
             // Blade shape
             ctx.beginPath();
             if (this.comboStep === 3) {
-                // Thrust shape
                 ctx.moveTo(0, -6); ctx.lineTo(length, 0); ctx.lineTo(0, 6);
+            } else if (isHeavy) {
+                // Crescent shape for heavy spin
+                ctx.moveTo(0, -10);
+                ctx.quadraticCurveTo(length, -30, length, 0);
+                ctx.quadraticCurveTo(length, 30, 0, 10);
             } else {
-                // Slash shape
                 ctx.moveTo(0, -4);
                 ctx.quadraticCurveTo(length/2, -15, length, 0);
                 ctx.quadraticCurveTo(length/2, 10, 0, 4);
@@ -401,6 +512,18 @@ class Player extends Entity {
             ctx.fill();
             ctx.restore();
             ctx.shadowBlur = 0;
+        }
+
+        // Charge glow aura
+        if (this.charging) {
+            let auraSize = Math.min(30, this.chargeTime);
+            ctx.beginPath();
+            ctx.arc(px + this.w/2, py + this.h/2, this.w + auraSize, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(255, 0, 234, ${auraSize/100})`;
+            ctx.fill();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = `rgba(255, 0, 234, ${auraSize/50})`;
+            ctx.stroke();
         }
     }
 }
