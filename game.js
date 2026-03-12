@@ -109,9 +109,20 @@ class Particle {
         ctx.shadowBlur = 10;
         ctx.shadowColor = this.color;
         ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+        
+        // Sharpe Wedge/Shard Shape instead of arc
+        ctx.save();
+        ctx.translate(this.x - cx, this.y - cy);
+        let angle = Math.atan2(this.vy, this.vx);
+        ctx.rotate(angle);
         ctx.beginPath();
-        ctx.arc(this.x - cx, this.y - cy, this.size, 0, Math.PI*2);
+        ctx.moveTo(this.size * 2, 0);
+        ctx.lineTo(-this.size, this.size/2);
+        ctx.lineTo(-this.size, -this.size/2);
+        ctx.closePath();
         ctx.fill();
+        ctx.restore();
+        
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
     }
@@ -557,18 +568,18 @@ class Player extends Entity {
             
             // Draw Afterimages
             for(let i=0; i<this.swordTrail.length; i++) {
-                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.2;
+                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.15;
                 ctx.save();
                 let ghostX = this.swordTrail[i].x - cx, ghostY = this.swordTrail[i].y - cy;
                 ctx.translate(ghostX + (this.swordTrail[i].fr ? this.w + 10 : -10), ghostY + 16);
                 
-                // Drawing a sharp line/slice instead of a white circle
-                ctx.strokeStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
-                ctx.lineWidth = 2;
+                // Sharp Motion Blades instead of strokes
+                ctx.fillStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
                 ctx.beginPath();
-                ctx.moveTo(-15, -15);
-                ctx.lineTo(15, 15);
-                ctx.stroke();
+                ctx.moveTo(-25, -2);
+                ctx.lineTo(25, 0);
+                ctx.lineTo(-25, 2);
+                ctx.fill();
                 ctx.restore();
             }
             ctx.globalAlpha = 1.0;
@@ -906,9 +917,11 @@ class RangedEnemy extends Entity {
 
 class Boss extends Entity {
     constructor(x, y) {
-        super(x, y, 60, 90);
-        this.speed = 1.8; this.hp = 800; this.maxHp = 800;
-        this.attackTimer = 180; this.state = 'idle'; this.phase = 1;
+        super(x, y, 70, 110);
+        this.speed = 3.5; // Much faster
+        this.hp = 1200; this.maxHp = 1200;
+        this.attackTimer = 150; this.state = 'idle'; this.phase = 1;
+        this.floatOffset = 0;
     }
     update(dt) {
         let dx = player.x + player.w/2 - (this.x + this.w/2);
@@ -956,19 +969,86 @@ class Boss extends Entity {
     }
     draw(ctx, cx, cy) {
         let ex = this.x - cx, ey = this.y - cy;
+        this.floatOffset = Math.sin(performance.now() * 0.005) * 15;
+        ey += this.floatOffset;
+
         ctx.filter = this.flashTimer > 0 ? "brightness(3)" : "none";
-        ctx.fillStyle = "#1a0033"; ctx.fillRect(ex, ey, this.w, this.h);
-        ctx.fillStyle = this.phase === 1 ? "#ff00ea" : "#ff0000";
-        ctx.shadowBlur = 20; ctx.shadowColor = ctx.fillStyle;
-        ctx.beginPath(); ctx.arc(ex + this.w/2, ey + 30, 20, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = "#fff"; ctx.fillRect(ex + (this.facingRight ? this.w-15 : 5), ey + 15, 10, 4);
-        ctx.shadowBlur = 0; ctx.filter = "none";
         
-        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(canvas.width/2 - 200, 40, 400, 15);
-        ctx.fillStyle = "#ff00ea"; ctx.fillRect(canvas.width/2 - 200, 40, 400 * (this.hp/this.maxHp), 15);
-        ctx.strokeStyle = "#fff"; ctx.strokeRect(canvas.width/2 - 200, 40, 400, 15);
-        ctx.fillStyle = "#fff"; ctx.font = "bold 14px 'Segoe UI', sans-serif";
-        ctx.textAlign = "center"; ctx.fillText("SHADOW OVERLORD", canvas.width/2, 35); ctx.textAlign = "left";
+        // --- Shadow Wraith Body ---
+        ctx.fillStyle = "#0a0015";
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = this.phase === 1 ? "#ff00ea" : "#ff0000";
+        
+        // Hood/Mantle
+        ctx.beginPath();
+        ctx.moveTo(ex + this.w/2, ey);
+        ctx.bezierCurveTo(ex - 20, ey + 20, ex - 10, ey + this.h, ex + this.w/2, ey + this.h + 20);
+        ctx.bezierCurveTo(ex + this.w + 10, ey + this.h, ex + this.w + 20, ey + 20, ex + this.w/2, ey);
+        ctx.fill();
+
+        // Tattered cloak bits
+        ctx.fillStyle = "#15002a";
+        for(let i=0; i<5; i++) {
+            let tx = ex + (i * 15);
+            let th = 20 + Math.sin(performance.now() * 0.01 + i) * 10;
+            ctx.beginPath();
+            ctx.moveTo(tx, ey + this.h - 10);
+            ctx.lineTo(tx + 7, ey + this.h + th);
+            ctx.lineTo(tx + 15, ey + this.h - 10);
+            ctx.fill();
+        }
+
+        // Glowing Face/Void
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.arc(ex + this.w/2, ey + 35, 25, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dread Eyes
+        let eyeColor = this.phase === 1 ? "#ff00ea" : "#fff";
+        ctx.fillStyle = eyeColor;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = eyeColor;
+        
+        let lookX = (player.x - this.x) * 0.02;
+        let lookY = (player.y - this.y) * 0.02;
+        
+        ctx.beginPath();
+        ctx.arc(ex + this.w/2 - 12 + lookX, ey + 32 + lookY, 6, 0, Math.PI*2);
+        ctx.arc(ex + this.w/2 + 12 + lookX, ey + 32 + lookY, 6, 0, Math.PI*2);
+        ctx.fill();
+        
+        // Crown/Horns
+        ctx.strokeStyle = "#220044";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(ex + this.w/2 - 20, ey + 10); ctx.lineTo(ex + this.w/2 - 35, ey - 20);
+        ctx.moveTo(ex + this.w/2 + 20, ey + 10); ctx.lineTo(ex + this.w/2 + 35, ey - 20);
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        ctx.filter = "none";
+        
+        // Boss HP Bar (Stay prominent)
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(canvas.width/2 - 250, 40, 500, 20);
+        let grad = ctx.createLinearGradient(canvas.width/2 - 250, 0, canvas.width/2 + 250, 0);
+        grad.addColorStop(0, "#4a0000");
+        grad.addColorStop(0.5, this.phase === 1 ? "#ff00ea" : "#ff0000");
+        grad.addColorStop(1, "#4a0000");
+        ctx.fillStyle = grad;
+        ctx.fillRect(canvas.width/2 - 250, 40, 500 * (this.hp/this.maxHp), 20);
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(canvas.width/2 - 250, 40, 500, 20);
+        
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 18px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.shadowBlur = 5; ctx.shadowColor = "#000";
+        ctx.fillText("SHADOW WRAITH OVERLORD", canvas.width/2, 35);
+        ctx.textAlign = "left";
+        ctx.shadowBlur = 0;
     }
 }
 
@@ -1010,12 +1090,20 @@ function drawParallaxBackground(ctx, camX, camY) {
         let px = (i * 120) - (camX * 0.3) % 120;
         let py = canvas.height - 180 + Math.sin(i * 123) * 80;
         ctx.lineTo(px, py);
-        // Draw some ruins spikes
         ctx.lineTo(px + 10, py - 40);
         ctx.lineTo(px + 20, py);
     }
     ctx.lineTo(canvas.width, canvas.height);
     ctx.fill();
+
+    // 5. Far Clouds (Cam Speed 0.02)
+    ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+    for(let i=0; i<5; i++) {
+        let cx = (i * 400 - camX * 0.02) % (canvas.width + 400);
+        ctx.beginPath();
+        ctx.ellipse(cx, 100 + i*50, 200, 40, 0, 0, Math.PI*2);
+        ctx.fill();
+    }
 }
 
 // --- Tile Renderer ---
@@ -1094,12 +1182,12 @@ function update(dt) {
         platforms = platforms.filter(p => p.y >= 500 || (p.x < player.x - 1000 || p.x > player.x + 2000));
     }
 
-    if (Math.random() < 0.04 && enemies.length < 15 && !gameWon) {
-        let spawnX = player.x + (Math.random() < 0.5 ? 800 : -800);
+    if (Math.random() < 0.06 && enemies.length < 20 && !gameWon) {
+        let spawnX = player.x + (Math.random() < 0.5 ? 900 : -900);
         let roll = Math.random();
-        if (roll < 0.2) {
-            enemies.push(new BatEnemy(spawnX, player.y - 120 - Math.random() * 80));
-        } else if (roll < 0.45) {
+        if (roll < 0.25) {
+            enemies.push(new BatEnemy(spawnX, player.y - 150));
+        } else if (roll < 0.55) {
             enemies.push(new RangedEnemy(spawnX, 50));
         } else {
             enemies.push(new Enemy(spawnX, 50));
