@@ -497,42 +497,120 @@ class Player extends Entity {
             ctx.save();
             let sx = this.facingRight ? px + this.w - 5 : px + 5;
             let sy = py + 22;
-            
-            // --- Preparation Poses ---
+
+            // Preparation tilt and shake
             let tilt = 0;
             if (this.isLmbCharging) {
-                // Point sword mostly backwards
                 tilt = this.facingRight ? Math.PI * 0.8 : -Math.PI * 0.8;
-                let s = Math.min(this.lmbChargeTime/5, 4);
-                sx += (Math.random()-0.5)*s;
-                sy += (Math.random()-0.5)*s;
+                let s = Math.min(this.lmbChargeTime / 5, 4);
+                sx += (Math.random() - 0.5) * s;
+                sy += (Math.random() - 0.5) * s;
             } else if (this.charging) {
-                // Point sword even deeper back
                 tilt = this.facingRight ? Math.PI * 1.1 : -Math.PI * 1.1;
-                let s = Math.min(this.chargeTime/5, 6);
-                sx += (Math.random()-0.5)*s;
-                sy += (Math.random()-0.5)*s;
+                let s = Math.min(this.chargeTime / 5, 6);
+                sx += (Math.random() - 0.5) * s;
+                sy += (Math.random() - 0.5) * s;
             }
 
             ctx.translate(sx, sy);
-            ctx.rotate((this.facingRight ? -Math.PI/4 : Math.PI/4 + Math.PI) + tilt);
-            
-            // Build the Blade
-            let grad = ctx.createLinearGradient(0, 0, 35, 0);
-            grad.addColorStop(0, "#fff");
-            grad.addColorStop(1, "#334");
-            
-            ctx.shadowBlur = (this.isLmbCharging || this.charging) ? 25 : 10;
-            ctx.shadowColor = (this.charging) ? "#ff00ea" : "#00f3ff";
-            ctx.fillStyle = grad;
+            ctx.rotate((this.facingRight ? -Math.PI / 4 : Math.PI / 4 + Math.PI) + tilt);
+
+            let isCharging = this.isLmbCharging || this.charging;
+            let chargeColor = this.charging ? "#ff00ea" : "#00f3ff";
+
+            // === BLADE ===
+            // Main blade body (slightly curved profile via polygon)
+            let bladeLen = 55;
+            let bladeGrad = ctx.createLinearGradient(0, 0, bladeLen, 0);
+            bladeGrad.addColorStop(0,   "#d0d8e8"); // base near guard — steel grey
+            bladeGrad.addColorStop(0.3, "#f8f8ff"); // bright center
+            bladeGrad.addColorStop(0.7, "#b8c8d8"); // mid dulling
+            bladeGrad.addColorStop(1,   "#8090a0"); // tip
+            ctx.shadowBlur  = isCharging ? 30 : 12;
+            ctx.shadowColor = chargeColor;
+            ctx.fillStyle   = bladeGrad;
             ctx.beginPath();
-            ctx.moveTo(0, -2); ctx.lineTo(35, 0); ctx.lineTo(0, 2); ctx.fill();
-            
-            ctx.fillStyle = "#111"; ctx.fillRect(-8, -2, 8, 4); // Handle
-            ctx.fillStyle = "#ffd700"; ctx.fillRect(-2, -5, 3, 10); // Guard
+            ctx.moveTo(0,        -2.5);
+            ctx.lineTo(bladeLen, 0);
+            ctx.lineTo(0,         2.5);
+            ctx.closePath();
+            ctx.fill();
+
+            // Blade bevel / edge highlight (thin bright line along top edge)
+            ctx.strokeStyle = "rgba(255,255,255,0.75)";
+            ctx.lineWidth   = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(2, -2);
+            ctx.lineTo(bladeLen - 2, 0);
+            ctx.stroke();
+
+            // Spine darkening (bottom edge)
+            ctx.strokeStyle = "rgba(0,0,0,0.25)";
+            ctx.lineWidth   = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(2, 2);
+            ctx.lineTo(bladeLen - 2, 0.3);
+            ctx.stroke();
+
+            // Charge shimmer along blade
+            if (isCharging) {
+                let shimmerX = ((performance.now() * 0.15) % bladeLen);
+                let shimmerGrad = ctx.createLinearGradient(shimmerX - 10, 0, shimmerX + 10, 0);
+                shimmerGrad.addColorStop(0,   "rgba(255,255,255,0)");
+                shimmerGrad.addColorStop(0.5, "rgba(255,255,255,0.9)");
+                shimmerGrad.addColorStop(1,   "rgba(255,255,255,0)");
+                ctx.fillStyle = shimmerGrad;
+                ctx.beginPath();
+                ctx.moveTo(0, -2.5); ctx.lineTo(bladeLen, 0); ctx.lineTo(0, 2.5);
+                ctx.closePath(); ctx.fill();
+            }
+
+            // Tip glow
+            ctx.shadowBlur  = isCharging ? 20 : 8;
+            ctx.shadowColor = isCharging ? chargeColor : "#aaddff";
+            ctx.fillStyle   = isCharging ? chargeColor : "#d0e8ff";
+            ctx.beginPath();
+            ctx.arc(bladeLen, 0, isCharging ? 2.5 : 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // === GUARD (tsuba) — diamond shape ===
+            ctx.shadowBlur  = 6;
+            ctx.shadowColor = "#ffd700";
+            ctx.fillStyle   = "#c8a000";
+            ctx.beginPath();
+            ctx.moveTo(-1, -7); ctx.lineTo(4, 0);
+            ctx.lineTo(-1,  7); ctx.lineTo(-5, 0);
+            ctx.closePath(); ctx.fill();
+            // Guard highlight
+            ctx.fillStyle = "rgba(255,230,100,0.6)";
+            ctx.beginPath();
+            ctx.moveTo(-1, -6); ctx.lineTo(3, 0); ctx.lineTo(-1, 0);
+            ctx.closePath(); ctx.fill();
+
+            // === HANDLE ===
+            ctx.shadowBlur = 0;
+            // Handle wrap base (dark)
+            ctx.fillStyle = "#1a0a02";
+            ctx.fillRect(-16, -2.5, 12, 5);
+            // Wrap grip lines (cord pattern)
+            ctx.strokeStyle = "#8B4513";
+            ctx.lineWidth   = 1.5;
+            for (let g = 0; g < 4; g++) {
+                ctx.beginPath();
+                ctx.moveTo(-15 + g * 3, -2.5);
+                ctx.lineTo(-13 + g * 3,  2.5);
+                ctx.stroke();
+            }
+            // Pommel cap
+            ctx.fillStyle = "#c8a000";
+            ctx.beginPath();
+            ctx.arc(-17, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+
             ctx.restore();
             ctx.shadowBlur = 0;
         }
+
 
         // ===== ATTACK ANIMATION - Dead Cells filled arc sweep =====
         if (this.attacking) {
