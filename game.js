@@ -242,6 +242,9 @@ class Player extends Entity {
         this.justRightClicked = false;
         this.justJumped = false;
         this.trail = []; // For scarf
+        this.swordTrail = []; // For afterimage/slash effect
+        this.lmbChargeTime = 0;
+        this.isLmbCharging = false;
     }
     
     update(dt) {
@@ -285,12 +288,38 @@ class Player extends Entity {
             this.jumpTimer = 0; // Cut jump short if released
         }
 
-        // Light Attack (Left Click / Z)
-        let attackInput = (keys['KeyZ'] || mouse.clicked);
-        if (attackInput && !this.justClicked && !this.charging) { 
+        // Light Attack / Charged Attack (Left Click / Z)
+        let lmbInput = mouse.clicked;
+        let zKeyInput = keys['KeyZ'];
+
+        // Handle LMB Charging
+        if (lmbInput && !this.attacking) {
+            this.isLmbCharging = true;
+            this.lmbChargeTime += dt;
+            
+            // Charge visual particle gather
+            if (this.lmbChargeTime > 15 && Math.random() < 0.4) {
+                let angle = Math.random() * Math.PI * 2;
+                let dist = 30 + Math.random() * 20;
+                let px = this.x + this.w/2 + Math.cos(angle) * dist;
+                let py = this.y + this.h/2 + Math.sin(angle) * dist;
+                particles.push(new Particle(px, py, "#00f3ff", 2, 12)); // Cyan gather for LMB
+            }
+        } else if (!lmbInput && this.isLmbCharging) {
+            this.isLmbCharging = false;
+            if (this.lmbChargeTime > 25) {
+                this.triggerChargedDash();
+            } else {
+                this.triggerAttack();
+            }
+            this.lmbChargeTime = 0;
+        }
+
+        // Z Key still triggers normal attack normally
+        if (zKeyInput && !this.justClicked && !this.isLmbCharging && !this.attacking) { 
             this.justClicked = true; 
             this.triggerAttack(); 
-        } else if (!attackInput) { 
+        } else if (!zKeyInput) { 
             this.justClicked = false; 
         }
 
@@ -343,9 +372,25 @@ class Player extends Entity {
         this.move(dt);
         
         // Scarf update (ribbon trailing)
-        // Insert neck position
         this.trail.unshift({x: this.facingRight ? this.x + 5 : this.x + this.w - 5, y: this.y + 12});
         if (this.trail.length > 8) this.trail.pop();
+
+        // Sword Trail/Afterimage update
+        if (this.attacking) {
+            this.swordTrail.unshift({x: this.x, y: this.y, fr: this.facingRight, step: this.comboStep, timer: this.attackTimer});
+            if (this.swordTrail.length > 6) this.swordTrail.pop();
+        } else {
+            if (this.swordTrail.length > 0) this.swordTrail.pop();
+        }
+    }
+
+    triggerChargedDash() {
+        this.attacking = true;
+        this.comboStep = 5; // Indicator for Charged Dash
+        this.attackTimer = 20;
+        this.vx += this.facingRight ? 25 : -25; // Massive Dash
+        cameraShake.trigger(10, 15);
+        for(let i=0; i<15; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, "#0ff", 6, 25));
     }
 
     triggerAttack() {
@@ -372,16 +417,18 @@ class Player extends Entity {
 
     doDamage() {
         let isHeavy = (this.comboStep === 4);
+        let isDash = (this.comboStep === 5);
         
         let hitbox = {
-            x: this.facingRight ? this.x + this.w : this.x - (isHeavy ? 100 : 60),
-            y: this.y - (isHeavy ? 30 : 15), 
-            w: (isHeavy ? 100 : 60), 
-            h: this.h + (isHeavy ? 60 : 30)
+            x: this.facingRight ? this.x + this.w : this.x - (isHeavy || isDash ? 100 : 60),
+            y: this.y - (isHeavy || isDash ? 30 : 15), 
+            w: (isHeavy || isDash ? 100 : 60), 
+            h: this.h + (isHeavy || isDash ? 60 : 30)
         };
 
         let damage = this.baseDamage + (this.comboStep === 3 ? this.baseDamage * 0.8 : 0);
-        if (isHeavy) damage = this.baseDamage * 3.5; // Massive damage
+        if (isHeavy) damage = this.baseDamage * 3.5;
+        if (isDash) damage = this.baseDamage * 2.5;
 
         let crit = Math.random() < (isHeavy ? 0.5 : 0.25);
         if (crit) { damage *= 2; cameraShake.trigger(isHeavy ? 15 : 8, 10); }
@@ -468,22 +515,35 @@ class Player extends Entity {
         // Draw Static Sword when not attacking
         if (!this.attacking) {
             ctx.save();
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = "#ff0055";
-            ctx.fillStyle = "rgba(255, 0, 85, 0.9)";
-            
             let sx = this.facingRight ? px + this.w - 5 : px + 5;
             let sy = py + 22;
             ctx.translate(sx, sy);
-            
-            // Pointing back a bit
             ctx.rotate(this.facingRight ? -Math.PI/4 : Math.PI/4 + Math.PI);
             
+            // Refined Katana Shape
+            let grad = ctx.createLinearGradient(0, 0, 35, 0);
+            grad.addColorStop(0, "#fff");
+            grad.addColorStop(0.2, "#aab");
+            grad.addColorStop(1, "#334");
+            
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#0ff";
+            ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.moveTo(0, -3);
-            ctx.lineTo(35, 0); // Blade length
-            ctx.lineTo(0, 3);
+            ctx.moveTo(0, -2);
+            ctx.lineTo(32, -1);
+            ctx.lineTo(35, 0); // Point
+            ctx.lineTo(32, 1);
+            ctx.lineTo(0, 2);
             ctx.fill();
+            
+            // Handle (Tsuka)
+            ctx.fillStyle = "#111";
+            ctx.fillRect(-8, -2, 8, 4);
+            // Guard (Tsuba)
+            ctx.fillStyle = "#ffd700";
+            ctx.fillRect(-2, -5, 3, 10);
+            
             ctx.restore();
             ctx.shadowBlur = 0;
         }
@@ -491,61 +551,104 @@ class Player extends Entity {
         // Draw Sword Attack
         if (this.attacking) {
             let isHeavy = (this.comboStep === 4);
-            let totalTime = isHeavy ? 25 : (this.comboStep === 3 ? 18 : 12);
+            let isDash = (this.comboStep === 5);
+            let totalTime = isHeavy ? 25 : (isDash ? 20 : (this.comboStep === 3 ? 18 : 12));
             let progress = 1 - (this.attackTimer / totalTime);
-            ctx.save();
             
+            // Draw Afterimages
+            for(let i=0; i<this.swordTrail.length; i++) {
+                ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.3;
+                // Simplified ghost of the slash
+                ctx.save();
+                let ghostX = this.swordTrail[i].x - cx, ghostY = this.swordTrail[i].y - cy;
+                ctx.translate(ghostX + (this.swordTrail[i].fr ? this.w + 10 : -10), ghostY + 16);
+                ctx.fillStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
+                ctx.beginPath();
+                ctx.arc(0, 0, 40, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            }
+            ctx.globalAlpha = 1.0;
+
+            ctx.save();
             // Neon Glow effect
-            ctx.shadowBlur = isHeavy ? 30 : 20;
-            ctx.shadowColor = isHeavy ? "#ff00ea" : "#ff0055";
-            ctx.fillStyle = isHeavy ? "rgba(255, 0, 234, 0.9)" : "rgba(255, 0, 85, 0.9)";
+            ctx.shadowBlur = (isHeavy || isDash) ? 35 : 20;
+            let slashColor = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
+            ctx.shadowColor = slashColor;
+            ctx.fillStyle = slashColor;
             
             let sx = this.facingRight ? px + this.w + 10 : px - 10;
             let sy = py + 16;
             ctx.translate(sx, sy);
             
-            let angle = 0, length = isHeavy ? 100 : (60 + (this.comboStep === 3 ? 30 : 0));
+            let angle = 0, length = isHeavy ? 110 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
             
-            if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.2;
-            else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.2;
-            else if (this.comboStep === 3) angle = 0; // Thrust
+            if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.4;
+            else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.4;
+            else if (this.comboStep === 3 || isDash) angle = 0; // Thrust/Dash
             else if (isHeavy) {
-                // Circular massive spin for heavy
-                angle = progress * Math.PI * 4; // spin twice
+                angle = progress * Math.PI * 4;
             }
 
-            if (!this.facingRight && this.comboStep !== 3 && !isHeavy) angle = Math.PI - angle;
-            else if (!this.facingRight && !isHeavy) angle = Math.PI;
+            if (!this.facingRight && this.comboStep !== 3 && !isHeavy && !isDash) angle = Math.PI - angle;
+            else if (!this.facingRight && (this.comboStep === 3 || isDash)) angle = Math.PI;
 
             ctx.rotate(angle);
             
-            // Blade shape
+            // Refined Blade Slash Shape
             ctx.beginPath();
-            if (this.comboStep === 3) {
-                ctx.moveTo(0, -6); ctx.lineTo(length, 0); ctx.lineTo(0, 6);
+            if (this.comboStep === 3 || isDash) {
+                // Pointy thrust
+                ctx.moveTo(0, -5); ctx.lineTo(length, 0); ctx.lineTo(0, 5);
             } else if (isHeavy) {
-                // Crescent shape for heavy spin
-                ctx.moveTo(0, -10);
-                ctx.quadraticCurveTo(length, -30, length, 0);
-                ctx.quadraticCurveTo(length, 30, 0, 10);
+                ctx.moveTo(0, -12);
+                ctx.quadraticCurveTo(length, -40, length, 0);
+                ctx.quadraticCurveTo(length, 40, 0, 12);
             } else {
-                ctx.moveTo(0, -4);
-                ctx.quadraticCurveTo(length/2, -15, length, 0);
-                ctx.quadraticCurveTo(length/2, 10, 0, 4);
+                ctx.moveTo(0, -6);
+                ctx.quadraticCurveTo(length/2, -20, length, 0);
+                ctx.quadraticCurveTo(length/2, 20, 0, 6);
             }
             ctx.fill();
+            
+            // Add a white core to the slash
+            ctx.fillStyle = "#fff";
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            if (this.comboStep === 3 || isDash) {
+                ctx.moveTo(0, -2); ctx.lineTo(length, 0); ctx.lineTo(0, 2);
+            } else {
+                ctx.moveTo(0, -2);
+                ctx.quadraticCurveTo(length/2, -10, length, 0);
+                ctx.quadraticCurveTo(length/2, 10, 0, 2);
+            }
+            ctx.fill();
+            
             ctx.restore();
             ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1.0;
         }
 
-        // Charge glow aura
+        // LMB Charge glow aura
+        if (this.isLmbCharging && this.lmbChargeTime > 5) {
+            let auraSize = Math.min(25, this.lmbChargeTime);
+            ctx.beginPath();
+            ctx.arc(px + this.w/2, py + this.h/2, this.w + auraSize, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(0, 243, 255, ${auraSize/100})`;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = `rgba(0, 243, 255, ${auraSize/50})`;
+            ctx.stroke();
+        }
+
+        // Heavy Charge (RMB) glow aura
         if (this.charging) {
             let auraSize = Math.min(30, this.chargeTime);
             ctx.beginPath();
             ctx.arc(px + this.w/2, py + this.h/2, this.w + auraSize, 0, Math.PI*2);
             ctx.fillStyle = `rgba(255, 0, 234, ${auraSize/100})`;
             ctx.fill();
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 2;
             ctx.strokeStyle = `rgba(255, 0, 234, ${auraSize/50})`;
             ctx.stroke();
         }
@@ -731,6 +834,141 @@ class BatEnemy extends Entity {
     }
 }
 
+class Projectile {
+    constructor(x, y, vx, vy, ownerType) {
+        this.x = x; this.y = y;
+        this.w = 8; this.h = 8;
+        this.vx = vx; this.vy = vy;
+        this.ownerType = ownerType;
+        this.life = 300;
+    }
+    update(dt) {
+        this.x += this.vx * dt; this.y += this.vy * dt;
+        this.life -= dt;
+        for (let p of platforms) { if (AABB(this, p)) { this.life = 0; break; } }
+    }
+    draw(ctx, cx, cy) {
+        ctx.fillStyle = this.ownerType === 'player' ? "#0ff" : "#f00";
+        ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
+        ctx.beginPath(); ctx.arc(this.x - cx, this.y - cy, 4, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
+class RangedEnemy extends Entity {
+    constructor(x, y) {
+        super(x, y, 22, 32);
+        this.speed = 1.2; this.hp = 45; this.maxHp = 45;
+        this.shootTimer = 100 + Math.random() * 50;
+    }
+    update(dt) {
+        let dx = player.x - this.x; let dy = player.y - this.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        this.facingRight = (dx > 0);
+        if (dist > 450) this.vx = (dx/dist) * this.speed;
+        else if (dist < 250) this.vx = -(dx/dist) * this.speed;
+        else this.vx *= 0.8;
+        if (dist < 600) {
+            this.shootTimer -= dt;
+            if (this.shootTimer <= 0) {
+                this.shootTimer = 120 + Math.random() * 60;
+                let angle = Math.atan2(dy, dx);
+                projectiles.push(new Projectile(this.x + this.w/2, this.y + this.h/2, Math.cos(angle)*5, Math.sin(angle)*5, 'enemy'));
+                for(let i=0; i<3; i++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, "#f00", 2, 10));
+            }
+        }
+        this.move(dt);
+        if (AABB(this, player) && player.flashTimer <= 0) { player.hp -= 10; player.flashTimer = 40; cameraShake.trigger(5, 10); }
+    }
+    takeDamage(amt, hitRight) {
+        this.hp -= amt; this.flashTimer = 8; this.vx = hitRight ? 5 : -5;
+        texts.push(new FloatingText(this.x, this.y, Math.floor(amt), "#fff"));
+        if (this.hp <= 0) {
+            for(let i=0; i<3; i++) orbs.push(new Orb(this.x + 10, this.y + 10));
+            cameraShake.trigger(5, 10);
+        }
+    }
+    draw(ctx, cx, cy) {
+        let ex = this.x - cx, ey = this.y - cy;
+        ctx.filter = this.flashTimer > 0 ? "brightness(3)" : "none";
+        ctx.fillStyle = "#2d1b4d"; ctx.fillRect(ex, ey + 4, this.w, this.h - 4);
+        ctx.fillStyle = "#ff0000"; ctx.shadowBlur = 10; ctx.shadowColor = "#ff0000";
+        ctx.fillRect(this.facingRight ? ex + this.w - 8 : ex + 3, ey + 6, 5, 5);
+        ctx.shadowBlur = 0; ctx.strokeStyle = "#4d2c80"; ctx.lineWidth = 3;
+        ctx.beginPath(); let ox = this.facingRight ? ex + this.w + 5 : ex - 5;
+        ctx.moveTo(ox, ey); ctx.lineTo(ox, ey + this.h); ctx.stroke();
+        ctx.filter = "none";
+    }
+}
+
+class Boss extends Entity {
+    constructor(x, y) {
+        super(x, y, 60, 90);
+        this.speed = 1.8; this.hp = 800; this.maxHp = 800;
+        this.attackTimer = 180; this.state = 'idle'; this.phase = 1;
+    }
+    update(dt) {
+        let dx = player.x + player.w/2 - (this.x + this.w/2);
+        let dy = player.y + player.h/2 - (this.y + this.h/2);
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        this.facingRight = (dx > 0);
+
+        if (this.state === 'idle') {
+            if (dist > 200) this.vx = (dx/dist) * this.speed;
+            else this.vx *= 0.8;
+            this.attackTimer -= dt;
+            if (this.attackTimer <= 0) { this.state = Math.random() < 0.5 ? 'burst' : 'slam'; this.attackTimer = 120; }
+        } else if (this.state === 'burst') {
+            this.vx *= 0.5;
+            if (Math.floor(this.attackTimer) % 20 === 0) {
+                for(let i=0; i<8; i++) {
+                    let angle = (i/8) * Math.PI * 2;
+                    projectiles.push(new Projectile(this.x + this.w/2, this.y + this.h/2, Math.cos(angle)*6, Math.sin(angle)*6, 'enemy'));
+                }
+            }
+            this.attackTimer -= dt;
+            if (this.attackTimer <= 0) { this.state = 'idle'; this.attackTimer = 150; }
+        } else if (this.state === 'slam') {
+            this.vx = (dx/dist) * this.speed * 3;
+            if (dist < 100) {
+                cameraShake.trigger(20, 20);
+                if (AABB(this, player) && player.flashTimer <= 0) { player.hp -= 30; player.flashTimer = 50; player.vx = (dx > 0 ? -15 : 15); }
+                this.state = 'idle'; this.attackTimer = 200;
+                for(let i=0; i<20; i++) particles.push(new Particle(this.x+this.w/2, this.y+this.h, "#fff", 8, 30, true));
+            }
+            this.attackTimer -= dt;
+            if (this.attackTimer <= 0) { this.state = 'idle'; this.attackTimer = 150; }
+        }
+        this.move(dt);
+        if (this.hp < this.maxHp / 2) this.phase = 2;
+    }
+    takeDamage(amt, hitRight) {
+        this.hp -= amt; this.flashTimer = 10;
+        texts.push(new FloatingText(this.x, this.y, Math.floor(amt), "#ff00ea"));
+        cameraShake.trigger(8, 10);
+        if (this.hp <= 0) {
+            gameWon = true;
+            for(let i=0; i<50; i++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, "#ff00ea", 10, 60, true));
+        }
+    }
+    draw(ctx, cx, cy) {
+        let ex = this.x - cx, ey = this.y - cy;
+        ctx.filter = this.flashTimer > 0 ? "brightness(3)" : "none";
+        ctx.fillStyle = "#1a0033"; ctx.fillRect(ex, ey, this.w, this.h);
+        ctx.fillStyle = this.phase === 1 ? "#ff00ea" : "#ff0000";
+        ctx.shadowBlur = 20; ctx.shadowColor = ctx.fillStyle;
+        ctx.beginPath(); ctx.arc(ex + this.w/2, ey + 30, 20, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.fillRect(ex + (this.facingRight ? this.w-15 : 5), ey + 15, 10, 4);
+        ctx.shadowBlur = 0; ctx.filter = "none";
+        
+        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(canvas.width/2 - 200, 40, 400, 15);
+        ctx.fillStyle = "#ff00ea"; ctx.fillRect(canvas.width/2 - 200, 40, 400 * (this.hp/this.maxHp), 15);
+        ctx.strokeStyle = "#fff"; ctx.strokeRect(canvas.width/2 - 200, 40, 400, 15);
+        ctx.fillStyle = "#fff"; ctx.font = "bold 14px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center"; ctx.fillText("SHADOW OVERLORD", canvas.width/2, 35); ctx.textAlign = "left";
+    }
+}
+
 // --- Parallax Background Renderer ---
 function drawParallaxBackground(ctx, camX, camY) {
     // 1. Sky Gradient
@@ -818,6 +1056,9 @@ let enemies = [
 let particles = [];
 let texts = [];
 let orbs = [];
+let projectiles = [];
+let gameWon = false;
+let bossSpawned = false;
 
 // Game Loop
 let lastTime = performance.now();
@@ -832,10 +1073,18 @@ function update(dt) {
         if (enemies[i].hp <= 0) enemies.splice(i, 1);
     }
     
-    if (Math.random() < 0.015 && enemies.length < 12) {
+    if (player.level >= 7 && !bossSpawned) {
+        bossSpawned = true;
+        enemies.push(new Boss(player.x + 600, 100));
+    }
+
+    if (Math.random() < 0.015 && enemies.length < 12 && !gameWon) {
         let spawnX = player.x + (Math.random() < 0.5 ? 800 : -800);
-        if (Math.random() < 0.3) {
+        let roll = Math.random();
+        if (roll < 0.2) {
             enemies.push(new BatEnemy(spawnX, player.y - 120 - Math.random() * 80));
+        } else if (roll < 0.45) {
+            enemies.push(new RangedEnemy(spawnX, 50));
         } else {
             enemies.push(new Enemy(spawnX, 50));
         }
@@ -854,6 +1103,20 @@ function update(dt) {
     for (let i = texts.length - 1; i >= 0; i--) {
         texts[i].update(dt);
         if (texts[i].life <= 0) texts.splice(i, 1);
+    }
+
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        projectiles[i].update(dt);
+        if (projectiles[i].life <= 0) { projectiles.splice(i, 1); continue; }
+        
+        if (projectiles[i].ownerType === 'enemy') {
+            if (AABB(projectiles[i], player) && player.flashTimer <= 0) {
+                player.hp -= 15;
+                player.flashTimer = 30;
+                projectiles.splice(i, 1);
+                cameraShake.trigger(10, 15);
+            }
+        }
     }
 
     cameraShake.update(dt);
@@ -910,6 +1173,30 @@ function drawHUD() {
         ctx.fillText("F5 to Resurrect", canvas.width/2, canvas.height/2 + 50);
         ctx.textAlign = "left";
     }
+
+    // Victory screen
+    if (gameWon) {
+        ctx.fillStyle = "rgba(0,0,10,0.8)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.textAlign = "center";
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = "#0ff";
+        ctx.fillStyle = "#0ff";
+        ctx.font = "bold 80px 'Segoe UI', sans-serif";
+        ctx.fillText("SHADOW DEFEATED", canvas.width/2, canvas.height/2 - 20);
+        
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = "#fff";
+        ctx.font = "24px 'Segoe UI', sans-serif";
+        ctx.fillText("The darkness yields to your blade.", canvas.width/2, canvas.height/2 + 40);
+        ctx.fillText("Score: " + player.score, canvas.width/2, canvas.height/2 + 80);
+        ctx.font = "italic 18px 'Segoe UI', sans-serif";
+        ctx.fillText("Press F5 to restart your journey", canvas.width/2, canvas.height/2 + 130);
+        
+        ctx.shadowBlur = 0;
+        ctx.textAlign = "left";
+    }
 }
 
 function draw() {
@@ -933,6 +1220,7 @@ function draw() {
     for (let p of platforms) drawTile(ctx, p, finalCamX, finalCamY);
     for (let orb of orbs) orb.draw(ctx, finalCamX, finalCamY);
     for (let enemy of enemies) enemy.draw(ctx, finalCamX, finalCamY);
+    for (let p of projectiles) p.draw(ctx, finalCamX, finalCamY);
     player.draw(ctx, finalCamX, finalCamY);
 
     // 4. Foreground Entities (Particles / Texts)
