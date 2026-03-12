@@ -661,7 +661,7 @@ class Enemy extends Entity {
     constructor(x, y) {
         super(x, y, 28, 34);
         this.speed = 1.0 + Math.random()*1.5;
-        this.hp = 350; this.maxHp = 350; // Much more HP
+        this.hp = 100; this.maxHp = 100; // 4 hits (25 dmg each)
         this.patrolTimer = 60;
         this.bouncePhase = Math.random() * Math.PI * 2;
     }
@@ -756,7 +756,7 @@ class BatEnemy extends Entity {
     constructor(x, y) {
         super(x, y, 20, 20);
         this.speed = 2.0;
-        this.hp = 200; this.maxHp = 200; // Much more HP
+        this.hp = 50; this.maxHp = 50; // 2 hits
         this.bouncePhase = Math.random() * Math.PI * 2;
     }
     update(dt) {
@@ -867,7 +867,7 @@ class Projectile {
 class RangedEnemy extends Entity {
     constructor(x, y) {
         super(x, y, 22, 32);
-        this.speed = 1.2; this.hp = 280; this.maxHp = 280; // Much more HP
+        this.speed = 1.2; this.hp = 75; this.maxHp = 75; // 3 hits
         this.shootTimer = 100 + Math.random() * 50;
     }
     update(dt) {
