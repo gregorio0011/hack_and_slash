@@ -5,16 +5,17 @@ const ctx = canvas.getContext('2d');
 const keys = {};
 window.addEventListener('keydown', e => { keys[e.code] = true; });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
-    window.addEventListener('mousedown', e => { 
-        if(e.button === 0) mouse.clicked = true; 
-        if(e.button === 2) mouse.rightClicked = true;
-    });
-    window.addEventListener('mouseup', e => { 
-        if(e.button === 0) mouse.clicked = false; 
-        if(e.button === 2) mouse.rightClicked = false;
-    });
-    // Previne o menu de contexto do botão direito
-    window.addEventListener('contextmenu', e => e.preventDefault());
+const mouse = { x: 0, y: 0, clicked: false, rightClicked: false };
+window.addEventListener('mousedown', e => { 
+    if(e.button === 0) mouse.clicked = true; 
+    if(e.button === 2) mouse.rightClicked = true;
+});
+window.addEventListener('mouseup', e => { 
+    if(e.button === 0) mouse.clicked = false; 
+    if(e.button === 2) mouse.rightClicked = false;
+});
+// Previne o menu de contexto do botão direito
+window.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- Game Constants & Globals ---
 const GRAVITY = 0.5;
