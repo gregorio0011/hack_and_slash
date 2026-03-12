@@ -341,12 +341,12 @@ class Player extends Entity {
             this.vx *= 0.3;
             if (this.attackTimer <= 0) {
                 this.attacking = false;
+                this.doDamage(); // Call FIRST so comboStep is still correct
                 if (this.comboStep === 4 || this.comboStep === 5) {
                     this.comboStep = 0;
                 } else {
                     this.comboWaitTimer = 25;
                 }
-                this.doDamage();
             }
         }
 
@@ -384,10 +384,8 @@ class Player extends Entity {
         this.attacking = true;
         this.comboStep = (this.comboStep + 1) % 4;
         if (this.comboStep === 0) this.comboStep = 1;
-        this.attackTimer = this.comboStep === 3 ? 18 : 12;
-        this.vx += this.facingRight ? 6 : -6; // Lunge forward
-        
-        // Swing dust
+        this.attackTimer = this.comboStep === 3 ? 22 : 16; // Slightly longer for visible sweep
+        this.vx += this.facingRight ? 6 : -6;
         for(let i=0; i<3; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h, "#555", 3, 10));
     }
 
@@ -412,8 +410,9 @@ class Player extends Entity {
             h: this.h + (isHeavy || isDash ? 60 : 20)
         };
 
-        let damage = this.baseDamage; // Constant damage for consistent hit count
-        // Removed combo bonuses and crits as per user request for precise hit balance
+        let damage = this.baseDamage;
+        if (isHeavy) damage = this.baseDamage * 4;   // Heavy hit
+        if (isDash)  damage = this.baseDamage * 3;   // Charged dash
 
         // Sword Visual Arc Particles
         for(let i=0; i<(isHeavy ? 20 : 8); i++) {
