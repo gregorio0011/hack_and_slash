@@ -106,25 +106,24 @@ class Particle {
     }
     draw(ctx, cx, cy) {
         ctx.fillStyle = this.color;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 0;
         ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
         
-        // Sharpe Wedge/Shard Shape instead of arc
+        // Fluid Slashes/Arcs instead of shards
         ctx.save();
         ctx.translate(this.x - cx, this.y - cy);
         let angle = Math.atan2(this.vy, this.vx);
         ctx.rotate(angle);
         ctx.beginPath();
-        ctx.moveTo(this.size * 2, 0);
-        ctx.lineTo(-this.size, this.size/2);
-        ctx.lineTo(-this.size, -this.size/2);
-        ctx.closePath();
-        ctx.fill();
+        // Drawing a thin, arcing stroke
+        ctx.moveTo(-this.size * 2, 0);
+        ctx.quadraticCurveTo(0, -this.size * 2, this.size * 2, 0);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
         ctx.restore();
         
         ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
     }
 }
 
@@ -528,8 +527,24 @@ class Player extends Entity {
             ctx.save();
             let sx = this.facingRight ? px + this.w - 5 : px + 5;
             let sy = py + 22;
+            
+            // Preparation poses
+            let tilt = 0;
+            if (this.isLmbCharging) {
+                tilt = this.facingRight ? Math.PI/2 : -Math.PI/2; // Tilt back for charged strike
+                // Subtle shake while charging
+                let s = Math.min(this.lmbChargeTime/5, 3);
+                sx += (Math.random()-0.5)*s;
+                sy += (Math.random()-0.5)*s;
+            } else if (this.charging) {
+                tilt = this.facingRight ? Math.PI * 0.7 : -Math.PI * 0.7; // Deep tilt for heavy attack
+                let s = Math.min(this.chargeTime/5, 4);
+                sx += (Math.random()-0.5)*s;
+                sy += (Math.random()-0.5)*s;
+            }
+
             ctx.translate(sx, sy);
-            ctx.rotate(this.facingRight ? -Math.PI/4 : Math.PI/4 + Math.PI);
+            ctx.rotate((this.facingRight ? -Math.PI/4 : Math.PI/4 + Math.PI) + tilt);
             
             // Refined Katana Shape
             let grad = ctx.createLinearGradient(0, 0, 35, 0);
@@ -537,23 +552,19 @@ class Player extends Entity {
             grad.addColorStop(0.2, "#aab");
             grad.addColorStop(1, "#334");
             
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = "#0ff";
+            ctx.shadowBlur = (this.isLmbCharging || this.charging) ? 20 : 10;
+            ctx.shadowColor = this.charging ? "#ff00ea" : "#0ff";
             ctx.fillStyle = grad;
             ctx.beginPath();
             ctx.moveTo(0, -2);
             ctx.lineTo(32, -1);
-            ctx.lineTo(35, 0); // Point
+            ctx.lineTo(35, 0);
             ctx.lineTo(32, 1);
             ctx.lineTo(0, 2);
             ctx.fill();
             
-            // Handle (Tsuka)
-            ctx.fillStyle = "#111";
-            ctx.fillRect(-8, -2, 8, 4);
-            // Guard (Tsuba)
-            ctx.fillStyle = "#ffd700";
-            ctx.fillRect(-2, -5, 3, 10);
+            ctx.fillStyle = "#111"; ctx.fillRect(-8, -2, 8, 4); // Handle
+            ctx.fillStyle = "#ffd700"; ctx.fillRect(-2, -5, 3, 10); // Guard
             
             ctx.restore();
             ctx.shadowBlur = 0;
@@ -566,30 +577,26 @@ class Player extends Entity {
             let totalTime = isHeavy ? 25 : (isDash ? 20 : (this.comboStep === 3 ? 18 : 12));
             let progress = 1 - (this.attackTimer / totalTime);
             
-            // Draw Afterimages
+            // Draw Afterimage Arcs
             for(let i=0; i<this.swordTrail.length; i++) {
                 ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.15;
                 ctx.save();
                 let ghostX = this.swordTrail[i].x - cx, ghostY = this.swordTrail[i].y - cy;
                 ctx.translate(ghostX + (this.swordTrail[i].fr ? this.w + 10 : -10), ghostY + 16);
                 
-                // Sharp Motion Blades instead of strokes
-                ctx.fillStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
+                ctx.strokeStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
+                ctx.lineWidth = 4;
                 ctx.beginPath();
-                ctx.moveTo(-25, -2);
-                ctx.lineTo(25, 0);
-                ctx.lineTo(-25, 2);
-                ctx.fill();
+                ctx.arc(0, 0, 50, -Math.PI/4, Math.PI/4);
+                ctx.stroke();
                 ctx.restore();
             }
             ctx.globalAlpha = 1.0;
 
             ctx.save();
-            // Neon Glow effect
             ctx.shadowBlur = (isHeavy || isDash) ? 35 : 20;
             let slashColor = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
             ctx.shadowColor = slashColor;
-            ctx.fillStyle = slashColor;
             
             let sx = this.facingRight ? px + this.w + 10 : px - 10;
             let sy = py + 16;
@@ -597,83 +604,45 @@ class Player extends Entity {
             
             let angle = 0, length = isHeavy ? 110 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
             
-            if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.4;
-            else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.4;
-            else if (this.comboStep === 3 || isDash) angle = 0; // Thrust/Dash
-            else if (isHeavy) {
-                angle = progress * Math.PI * 4;
-            }
+            if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.6;
+            else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.6;
+            else if (this.comboStep === 3 || isDash) angle = 0;
+            else if (isHeavy) angle = progress * Math.PI * 4;
 
             if (!this.facingRight && this.comboStep !== 3 && !isHeavy && !isDash) angle = Math.PI - angle;
             else if (!this.facingRight && (this.comboStep === 3 || isDash)) angle = Math.PI;
 
             ctx.rotate(angle);
             
-            // Refined Blade Slash Shape
+            // Fluid Blade Slash Arcs
             ctx.beginPath();
+            ctx.strokeStyle = slashColor;
+            ctx.lineWidth = 10;
+            ctx.lineCap = "round";
             if (this.comboStep === 3 || isDash) {
-                // Pointy thrust
-                ctx.moveTo(0, -5); ctx.lineTo(length, 0); ctx.lineTo(0, 5);
-            } else if (isHeavy) {
-                ctx.moveTo(0, -12);
-                ctx.quadraticCurveTo(length, -40, length, 0);
-                ctx.quadraticCurveTo(length, 40, 0, 12);
+                ctx.moveTo(0, 0); ctx.lineTo(length, 0);
             } else {
-                ctx.moveTo(0, -6);
-                ctx.quadraticCurveTo(length/2, -20, length, 0);
-                ctx.quadraticCurveTo(length/2, 20, 0, 6);
+                ctx.arc(0, 0, length, -0.5, 0.5);
             }
-            ctx.fill();
+            ctx.stroke();
             
-            // Add a white core to the slash
-            ctx.fillStyle = "#fff";
-            ctx.globalAlpha = 0.5;
-            ctx.beginPath();
-            if (this.comboStep === 3 || isDash) {
-                ctx.moveTo(0, -2); ctx.lineTo(length, 0); ctx.lineTo(0, 2);
-            } else {
-                ctx.moveTo(0, -2);
-                ctx.quadraticCurveTo(length/2, -10, length, 0);
-                ctx.quadraticCurveTo(length/2, 10, 0, 2);
-            }
-            ctx.fill();
+            // White core for the slash
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 3;
+            ctx.stroke();
             
             ctx.restore();
             ctx.shadowBlur = 0;
             ctx.globalAlpha = 1.0;
-        }
-
-        // LMB Charge glow aura
-        if (this.isLmbCharging && this.lmbChargeTime > 5) {
-            let auraSize = Math.min(25, this.lmbChargeTime);
-            ctx.beginPath();
-            ctx.arc(px + this.w/2, py + this.h/2, this.w + auraSize, 0, Math.PI*2);
-            ctx.fillStyle = `rgba(0, 243, 255, ${auraSize/100})`;
-            ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = `rgba(0, 243, 255, ${auraSize/50})`;
-            ctx.stroke();
-        }
-
-        // Heavy Charge (RMB) glow aura
-        if (this.charging) {
-            let auraSize = Math.min(30, this.chargeTime);
-            ctx.beginPath();
-            ctx.arc(px + this.w/2, py + this.h/2, this.w + auraSize, 0, Math.PI*2);
-            ctx.fillStyle = `rgba(255, 0, 234, ${auraSize/100})`;
-            ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = `rgba(255, 0, 234, ${auraSize/50})`;
-            ctx.stroke();
         }
     }
 }
 
 class Enemy extends Entity {
     constructor(x, y) {
-        super(x, y, 24, 30);
+        super(x, y, 28, 34);
         this.speed = 1.0 + Math.random()*1.5;
-        this.hp = 60; this.maxHp = 60;
+        this.hp = 180; this.maxHp = 180; // Triple health
         this.patrolTimer = 60;
         this.bouncePhase = Math.random() * Math.PI * 2;
     }
@@ -722,35 +691,42 @@ class Enemy extends Entity {
     }
     draw(ctx, cx, cy) {
         let ex = this.x - cx, ey = this.y - cy;
-        // Bobbing animation for beast
         let bob = Math.sin(this.bouncePhase) * 3;
         ey += bob;
 
         ctx.filter = this.flashTimer > 0 ? "brightness(3)" : "none";
 
-        // Body Beast
-        ctx.fillStyle = "#150b0b"; // dark red black
+        // Body Beast - More Ferocious
+        ctx.fillStyle = "#1c0909";
         ctx.beginPath();
         ctx.moveTo(ex, ey + this.h);
         ctx.lineTo(ex + this.w, ey + this.h);
-        ctx.lineTo(ex + this.w - (this.facingRight ? -5 : 5), ey + 8);
-        ctx.lineTo(ex + (this.facingRight ? 5 : -5), ey + 8);
+        ctx.lineTo(ex + this.w + 5, ey + 10);
+        ctx.lineTo(ex + this.w/2, ey); // Hunchback
+        ctx.lineTo(ex - 5, ey + 10);
         ctx.fill();
 
-        // Horns
-        ctx.fillStyle = "#050202";
+        // Tattered Fur
+        ctx.strokeStyle = "#100505";
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(ex + this.w/2, ey + 8);
-        ctx.lineTo(ex + this.w/2 - 10, ey - 5);
-        ctx.lineTo(ex + this.w/2 - 5, ey + 8);
+        for(let i=0; i<4; i++) {
+            ctx.moveTo(ex + i*6, ey + 20); ctx.lineTo(ex + i*6 - 5, ey + 28);
+        }
+        ctx.stroke();
+
+        // Horns/Spikes
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.moveTo(ex + 10, ey + 5); ctx.lineTo(ex + 2, ey - 8); ctx.lineTo(ex + 15, ey + 5);
+        ctx.moveTo(ex + 20, ey + 5); ctx.lineTo(ex + 28, ey - 8); ctx.lineTo(ex + 15, ey + 5);
         ctx.fill();
 
-        // Beast Eyes
+        // Glowing Red Eyes
         ctx.fillStyle = "#ff0000";
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = "#ff0000";
-        let eyeX = this.facingRight ? ex + this.w - 8 : ex + 4;
-        ctx.fillRect(eyeX, ey + 10, 5, 3);
+        ctx.shadowBlur = 15; ctx.shadowColor = "#ff0000";
+        let eyeX = this.facingRight ? ex + this.w - 10 : ex + 2;
+        ctx.fillRect(eyeX, ey + 12, 6, 3);
         ctx.shadowBlur = 0;
 
         ctx.filter = "none";
@@ -761,7 +737,7 @@ class BatEnemy extends Entity {
     constructor(x, y) {
         super(x, y, 20, 20);
         this.speed = 2.0;
-        this.hp = 30; this.maxHp = 30;
+        this.hp = 90; this.maxHp = 90; // Triple health
         this.bouncePhase = Math.random() * Math.PI * 2;
     }
     update(dt) {
@@ -872,7 +848,7 @@ class Projectile {
 class RangedEnemy extends Entity {
     constructor(x, y) {
         super(x, y, 22, 32);
-        this.speed = 1.2; this.hp = 45; this.maxHp = 45;
+        this.speed = 1.2; this.hp = 140; this.maxHp = 140; // Triple health
         this.shootTimer = 100 + Math.random() * 50;
     }
     update(dt) {
@@ -1004,26 +980,41 @@ class Boss extends Entity {
         ctx.arc(ex + this.w/2, ey + 35, 25, 0, Math.PI * 2);
         ctx.fill();
 
-        // Dread Eyes
+        // Dread Eyes - More detailed
         let eyeColor = this.phase === 1 ? "#ff00ea" : "#fff";
         ctx.fillStyle = eyeColor;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 25;
         ctx.shadowColor = eyeColor;
         
+        // Eyes flicker
+        let flicker = Math.random() * 0.5 + 0.5;
+        ctx.globalAlpha = flicker;
+
         let lookX = (player.x - this.x) * 0.02;
         let lookY = (player.y - this.y) * 0.02;
         
+        // Left Eye
+        ctx.beginPath(); ctx.ellipse(ex + this.w/2 - 15 + lookX, ey + 32 + lookY, 8, 4, 0.2, 0, Math.PI*2); ctx.fill();
+        // Right Eye
+        ctx.beginPath(); ctx.ellipse(ex + this.w/2 + 15 + lookX, ey + 32 + lookY, 8, 4, -0.2, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        // Ethereal Mist around eyes
+        ctx.strokeStyle = eyeColor;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(ex + this.w/2 - 12 + lookX, ey + 32 + lookY, 6, 0, Math.PI*2);
-        ctx.arc(ex + this.w/2 + 12 + lookX, ey + 32 + lookY, 6, 0, Math.PI*2);
-        ctx.fill();
+        ctx.arc(ex + this.w/2, ey + 32, 40 + Math.sin(performance.now()*0.01)*5, 0, Math.PI*2);
+        ctx.stroke();
         
-        // Crown/Horns
-        ctx.strokeStyle = "#220044";
-        ctx.lineWidth = 4;
+        // Crown/Horns - Curved and Dark
+        ctx.strokeStyle = "#1a0033";
+        ctx.lineWidth = 6;
+        ctx.lineJoin = "round";
         ctx.beginPath();
-        ctx.moveTo(ex + this.w/2 - 20, ey + 10); ctx.lineTo(ex + this.w/2 - 35, ey - 20);
-        ctx.moveTo(ex + this.w/2 + 20, ey + 10); ctx.lineTo(ex + this.w/2 + 35, ey - 20);
+        ctx.moveTo(ex + this.w/2 - 20, ey + 10);
+        ctx.quadraticCurveTo(ex - 40, ey - 20, ex - 10, ey - 60);
+        ctx.moveTo(ex + this.w/2 + 20, ey + 10);
+        ctx.quadraticCurveTo(ex + this.w + 40, ey - 20, ex + this.w + 10, ey - 60);
         ctx.stroke();
 
         ctx.shadowBlur = 0;
@@ -1227,6 +1218,12 @@ function update(dt) {
 }
 
 function drawHUD() {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset camera transform just in case
+    ctx.filter = "none";
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1.0;
+    
     // Health Bar
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.fillRect(30, 30, 200, 20);
@@ -1301,6 +1298,7 @@ function drawHUD() {
         ctx.shadowBlur = 0;
         ctx.textAlign = "left";
     }
+    ctx.restore();
 }
 
 function draw() {
