@@ -596,7 +596,7 @@ class Player extends Entity {
             let totalTime = isHeavy ? 25 : (isDash ? 20 : (this.comboStep === 3 ? 18 : 12));
             let progress = 1 - (this.attackTimer / totalTime);
             
-            // Fluid Motion Arcs
+            // --- Straight Slash Trails ---
             for(let i=0; i<this.swordTrail.length; i++) {
                 ctx.globalAlpha = (1 - (i/this.swordTrail.length)) * 0.2;
                 ctx.save();
@@ -604,9 +604,10 @@ class Player extends Entity {
                 ctx.translate(ghostX + (this.swordTrail[i].fr ? this.w + 10 : -10), ghostY + 16);
                 
                 ctx.strokeStyle = isHeavy ? "#ff00ea" : (isDash ? "#00f3ff" : "#fff");
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.arc(0, 0, 40 + i*5, -0.6, 0.6);
+                // Simple straight line for trail
+                ctx.moveTo(-length * 0.3, 0); ctx.lineTo(length * 0.7, 0);
                 ctx.stroke();
                 ctx.restore();
             }
@@ -623,26 +624,22 @@ class Player extends Entity {
             
             let angle = 0, length = isHeavy ? 120 : (isDash ? 100 : (60 + (this.comboStep === 3 ? 30 : 0)));
             
-            if (this.comboStep === 1) angle = Math.PI/2 - progress * Math.PI*1.8;
-            else if (this.comboStep === 2) angle = -Math.PI/2 + progress * Math.PI*1.8;
+            if (this.comboStep === 1) angle = Math.PI * 0.15;
+            else if (this.comboStep === 2) angle = -Math.PI * 0.15;
             else if (this.comboStep === 3 || isDash) angle = 0;
-            else if (isHeavy) angle = progress * Math.PI * 4;
+            else if (isHeavy) angle = Math.PI * 0.05;
 
-            if (!this.facingRight && this.comboStep !== 3 && !isHeavy && !isDash) angle = Math.PI - angle;
-            else if (!this.facingRight && (this.comboStep === 3 || isDash)) angle = Math.PI;
+            if (!this.facingRight) angle = Math.PI - angle;
 
             ctx.rotate(angle);
             
-            // Drawing the fluid blade arc
+            // --- Straight Blade Strike (NO ARCS) ---
             ctx.beginPath();
             ctx.strokeStyle = slashColor;
-            ctx.lineWidth = 12;
-            ctx.lineCap = "round";
-            if (this.comboStep === 3 || isDash) {
-                ctx.moveTo(0, 0); ctx.lineTo(length, 0);
-            } else {
-                ctx.arc(0, 0, length, -0.6, 0.6);
-            }
+            ctx.lineWidth = 15;
+            ctx.lineCap = "butt";
+            ctx.moveTo(-length * 0.1, 0);
+            ctx.lineTo(length, 0);
             ctx.stroke();
             
             // White core
@@ -849,7 +846,7 @@ class Projectile {
         this.w = 8; this.h = 8;
         this.vx = vx; this.vy = vy;
         this.ownerType = ownerType;
-        this.life = 60; // Reduced range
+        this.life = 40; // Even shorter range
     }
     update(dt) {
         this.x += this.vx * dt; this.y += this.vy * dt;
@@ -877,7 +874,7 @@ class RangedEnemy extends Entity {
         if (dist > 450) this.vx = (dx/dist) * this.speed;
         else if (dist < 250) this.vx = -(dx/dist) * this.speed;
         else this.vx *= 0.8;
-        if (dist < 600) {
+        if (dist < 350) { // Reduced shooting detection range
             this.shootTimer -= dt;
             if (this.shootTimer <= 0) {
                 this.shootTimer = 120 + Math.random() * 60;
